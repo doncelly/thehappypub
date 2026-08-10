@@ -40,6 +40,12 @@ function qtyOf(raw: { qty: number | null } | { qty: number | null }[] | null): n
   return row?.qty ?? 0;
 }
 
+// Sin tildes ni mayúsculas, para que "cafe" encuentre "Café" y "heineken" encuentre "Heineken (lata)".
+const DIACRITICS = new RegExp("[" + String.fromCharCode(0x0300) + "-" + String.fromCharCode(0x036f) + "]", "g");
+function normalizeSearch(s: string): string {
+  return s.normalize("NFD").replace(DIACRITICS, "").toLowerCase().trim();
+}
+
 export function VenderClient(props: Props) {
   const { menuCategories, tables, pairWatches, users, itemsWithRecipe, currentUserId, currentUserRole } = props;
   const supabase = useMemo(() => createClient(), []);
@@ -47,6 +53,7 @@ export function VenderClient(props: Props) {
   const recipeSet = useMemo(() => new Set(itemsWithRecipe), [itemsWithRecipe]);
 
   const [currentCat, setCurrentCat] = useState(menuCategories[0]?.id ?? "");
+  const [search, setSearch] = useState("");
   const [locks, setLocks] = useState<TableLock[]>(props.initialLocks);
   const [selectedTable, setSelectedTable] = useState<string | null>(
     () => props.initialLocks.find((l) => l.user_id === currentUserId)?.table_label ?? null,
@@ -129,7 +136,12 @@ export function VenderClient(props: Props) {
   }
 
   const itemsByCat = menuCategories.map((c) => ({ cat: c, items: props.menuItems.filter((m) => m.category === c.id) }));
-  const visibleItems = props.menuItems.filter((m) => m.category === currentCat);
+  const searchTerm = normalizeSearch(search);
+  const isSearching = searchTerm.length > 0;
+  const visibleItems = isSearching
+    ? props.menuItems.filter((m) => normalizeSearch(m.name).includes(searchTerm))
+    : props.menuItems.filter((m) => m.category === currentCat);
+  const categoryLabelById = Object.fromEntries(menuCategories.map((c) => [c.id, c.label]));
 
   function priceFor(m: MenuItem): { price: number; hasDiscount: boolean } {
     if (!props.discountPct || props.discountPct <= 0) return { price: m.price, hasDiscount: false };
@@ -247,19 +259,46 @@ export function VenderClient(props: Props) {
         </p>
       </Section>
 
-      <div className="mb-3.5 flex gap-1.5 overflow-x-auto pb-0.5">
-        {itemsByCat.map(({ cat }) => (
+      <div className="relative mb-3">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="🔍 Buscar producto…"
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-[13px] text-text"
+        />
+        {isSearching && (
           <button
-            key={cat.id}
-            onClick={() => setCurrentCat(cat.id)}
-            className={`flex-none whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${
-              cat.id === currentCat ? "border-navy bg-navy text-white" : "border-border bg-surface text-text-dim"
-            }`}
+            onClick={() => setSearch("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-[12px] text-text-faint"
           >
-            {cat.label}
+            ✕
           </button>
-        ))}
+        )}
       </div>
+
+      {!isSearching && (
+        <div className="mb-3.5 flex gap-1.5 overflow-x-auto pb-0.5">
+          {itemsByCat.map(({ cat }) => (
+            <button
+              key={cat.id}
+              onClick={() => setCurrentCat(cat.id)}
+              className={`flex-none whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold ${
+                cat.id === currentCat ? "border-navy bg-navy text-white" : "border-border bg-surface text-text-dim"
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isSearching && (
+        <p className="mb-2 text-[11px] text-text-dim">
+          {visibleItems.length === 0
+            ? "Sin resultados."
+            : `${visibleItems.length} resultado${visibleItems.length !== 1 ? "s" : ""}`}
+        </p>
+      )}
 
       <div className="mb-4 space-y-2">
         {visibleItems.map((m) => {
@@ -270,6 +309,7 @@ export function VenderClient(props: Props) {
             <div key={m.id} className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <div className="text-[12.5px] font-semibold">{m.name}</div>
+                {isSearching && <div className="text-[9px] text-text-faint">{categoryLabelById[m.category] ?? m.category}</div>}
                 <div className="mt-0.5 font-mono text-[10.5px]">
                   {hasDiscount ? (
                     <>
