@@ -155,7 +155,7 @@ export function CajaSection({ date, cashRegister: c, purchases, transportAid, ve
     <>
       <Section title="Recibo de caja (apertura)">
         <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <div>
               <FieldLabel>Responsable</FieldLabel>
               <input value={aperResp} onChange={(e) => setAperResp(e.target.value)} list="cajaUserNames" placeholder="Ej: Nathaly D" className={inputCls} />
@@ -202,7 +202,7 @@ export function CajaSection({ date, cashRegister: c, purchases, transportAid, ve
 
       <Section title="Cierre de caja">
         <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <div>
               <FieldLabel>Responsable</FieldLabel>
               <input value={cierreResp} onChange={(e) => setCierreResp(e.target.value)} list="cajaUserNames" placeholder="Ej: Nathaly D" className={inputCls} />

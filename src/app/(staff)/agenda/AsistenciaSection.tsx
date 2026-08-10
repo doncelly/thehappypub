@@ -147,6 +147,8 @@ export function AsistenciaSection({ date, attendance, users, onChanged }: Props)
                     onChange={(e) => setEdits((prev) => ({ ...prev, [editKey(a.user_id, a.work_type)]: { ...editFor(a.user_id, a.work_type), salida: e.target.value } }))}
                     className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] text-text"
                   />
+                </div>
+                <div className="mt-1.5 flex justify-end">
                   <MiniButton onClick={() => saveCorrection(a.user_id, a.work_type)} disabled={saving === editKey(a.user_id, a.work_type)}>
                     Guardar
                   </MiniButton>
@@ -158,7 +160,7 @@ export function AsistenciaSection({ date, attendance, users, onChanged }: Props)
       )}
 
       <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <div>
             <FieldLabel>Persona (registro manual)</FieldLabel>
             <input value={newPerson} onChange={(e) => setNewPerson(e.target.value)} list="agendaUserNames" placeholder="Ej: María" className={inputCls} />

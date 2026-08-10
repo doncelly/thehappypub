@@ -109,7 +109,7 @@ export function AgendaClient(props: Props) {
 
       <Section title="Operación del día">
         <div className="space-y-3 rounded-xl border border-border bg-surface p-3.5">
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <div className="min-w-0">
               <FieldLabel>Inicio de operación</FieldLabel>
               <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={inputCls} />
