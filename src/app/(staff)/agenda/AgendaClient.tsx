@@ -97,7 +97,7 @@ export function AgendaClient(props: Props) {
           type="date"
           value={date}
           onChange={(e) => e.target.value && goTo(e.target.value)}
-          className="flex-1 rounded-lg border border-border bg-surface px-2.5 py-2 text-[12px] font-semibold text-text"
+          className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2.5 py-2 text-[12px] font-semibold text-text"
         />
         <button
           onClick={() => goTo(shiftDate(date, 1))}
@@ -110,7 +110,7 @@ export function AgendaClient(props: Props) {
       <Section title="Operación del día">
         <div className="space-y-3 rounded-xl border border-border bg-surface p-3.5">
           <div className="grid grid-cols-2 gap-2.5">
-            <div>
+            <div className="min-w-0">
               <FieldLabel>Inicio de operación</FieldLabel>
               <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={inputCls} />
             </div>

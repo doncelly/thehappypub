@@ -139,13 +139,13 @@ export function AsistenciaSection({ date, attendance, users, onChanged }: Props)
                     type="time"
                     value={editFor(a.user_id, a.work_type).entrada}
                     onChange={(e) => setEdits((prev) => ({ ...prev, [editKey(a.user_id, a.work_type)]: { ...editFor(a.user_id, a.work_type), entrada: e.target.value } }))}
-                    className="flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] text-text"
+                    className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] text-text"
                   />
                   <input
                     type="time"
                     value={editFor(a.user_id, a.work_type).salida}
                     onChange={(e) => setEdits((prev) => ({ ...prev, [editKey(a.user_id, a.work_type)]: { ...editFor(a.user_id, a.work_type), salida: e.target.value } }))}
-                    className="flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] text-text"
+                    className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] text-text"
                   />
                   <MiniButton onClick={() => saveCorrection(a.user_id, a.work_type)} disabled={saving === editKey(a.user_id, a.work_type)}>
                     Guardar
@@ -163,7 +163,7 @@ export function AsistenciaSection({ date, attendance, users, onChanged }: Props)
             <FieldLabel>Persona (registro manual)</FieldLabel>
             <input value={newPerson} onChange={(e) => setNewPerson(e.target.value)} list="agendaUserNames" placeholder="Ej: María" className={inputCls} />
           </div>
-          <div>
+          <div className="min-w-0">
             <FieldLabel>Entrada</FieldLabel>
             <input type="time" value={newEntrada} onChange={(e) => setNewEntrada(e.target.value)} className={inputCls} />
           </div>
