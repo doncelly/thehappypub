@@ -243,14 +243,14 @@ export function CajaSection({ date, cashRegister: c, purchases, transportAid, ve
           ) : (
             <div className="space-y-1.5">
               {purchases.map((p) => (
-                <div key={p.id} className="flex justify-between rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-[11px]">
-                  <span>{p.concept}</span>
-                  <span className="flex items-center gap-1.5">
-                    {fmtCOP(p.amount)}
+                <div key={p.id} className="rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-[11px]">
+                  <div>{p.concept}</div>
+                  <div className="mt-1 flex items-center justify-end gap-1.5">
+                    <span className="font-mono">{fmtCOP(p.amount)}</span>
                     <MiniButton variant="danger" onClick={() => deleteCompra(p.id)}>
                       ✕
                     </MiniButton>
-                  </span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -273,14 +273,14 @@ export function CajaSection({ date, cashRegister: c, purchases, transportAid, ve
           ) : (
             <div className="space-y-1.5">
               {transportAid.map((a) => (
-                <div key={a.id} className="flex justify-between rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-[11px]">
-                  <span>{a.collaborator}</span>
-                  <span className="flex items-center gap-1.5">
-                    {fmtCOP(a.amount)}
+                <div key={a.id} className="rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-[11px]">
+                  <div>{a.collaborator}</div>
+                  <div className="mt-1 flex items-center justify-end gap-1.5">
+                    <span className="font-mono">{fmtCOP(a.amount)}</span>
                     <MiniButton variant="danger" onClick={() => deleteAux(a.id)}>
                       ✕
                     </MiniButton>
-                  </span>
+                  </div>
                 </div>
               ))}
             </div>
