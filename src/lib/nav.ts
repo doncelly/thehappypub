@@ -12,6 +12,7 @@ const NAV_BY_ROLE: Record<AppRole, NavItem[]> = {
     { href: "/caja", label: "Caja" },
     { href: "/recibidos", label: "Recibidos" },
     { href: "/vender", label: "Vender" },
+    { href: "/pedidos", label: "Pedidos" },
     { href: "/perdidas", label: "Pérdidas" },
     { href: "/vencimientos", label: "Vencimientos" },
     { href: "/galeria", label: "Galería" },
@@ -19,6 +20,7 @@ const NAV_BY_ROLE: Record<AppRole, NavItem[]> = {
   ],
   cocinero: [
     { href: "/mi-dia", label: "Mi día" },
+    { href: "/pedidos", label: "Pedidos" },
     { href: "/checklist", label: "Checklist" },
     { href: "/inventario", label: "Inventario" },
     { href: "/recibidos", label: "Recibidos" },

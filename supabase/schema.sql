@@ -214,13 +214,17 @@ comment on table public.table_locks is
   'de más de 20 min (MESA_TIMEOUT_MS) como expirados y liberarlos.';
 
 create table public.orders (
-  id          uuid primary key default gen_random_uuid(),
-  table_label text not null,
-  user_id     uuid not null references public.users(id),
-  total       numeric not null default 0,
-  created_at  timestamptz not null default now()
+  id              uuid primary key default gen_random_uuid(),
+  table_label     text not null,
+  user_id         uuid not null references public.users(id),
+  total           numeric not null default 0,
+  created_at      timestamptz not null default now(),
+  kitchen_ack_at  timestamptz,
+  kitchen_ack_by  uuid references public.users(id)
 );
 comment on table public.orders is 'shared.pedidos original.';
+comment on column public.orders.kitchen_ack_at is
+  'Cuándo cocina marcó el pedido como recibido/en preparación. Null = pendiente — alimenta la pantalla de Pedidos de cocinero.';
 
 create table public.order_items (
   id            bigint generated always as identity primary key,
@@ -766,6 +770,34 @@ comment on function public.void_order is
 
 grant execute on function public.void_order(uuid) to authenticated;
 
+-- Cocina marca un pedido como recibido/en preparación desde la pantalla de
+-- Pedidos — reemplaza la comanda de papel. SECURITY DEFINER porque cocinero
+-- no tiene permiso de UPDATE por RLS sobre orders (solo jefe lo tiene); esta
+-- función es la única puerta de escritura para ese rol sobre esta tabla.
+create or replace function public.ack_order_kitchen(p_order_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_role text := public.current_user_role();
+  v_user_id uuid := public.current_user_id();
+begin
+  if v_user_id is null or v_role not in ('jefe', 'cocinero') then
+    raise exception 'Solo cocina puede marcar un pedido como recibido.';
+  end if;
+
+  update public.orders
+  set kitchen_ack_at = now(), kitchen_ack_by = v_user_id
+  where id = p_order_id;
+end;
+$$;
+comment on function public.ack_order_kitchen is
+  'RPC para Pedidos (cocinero): marca un pedido como recibido/en preparación. Bypasea RLS a propósito — cocinero no tiene UPDATE directo sobre orders.';
+
+grant execute on function public.ack_order_kitchen(uuid) to authenticated;
+
 -- ============================================================================
 -- 14c. RECIBIDOS — registrar entrega de proveedor / marcar pedido como llegado
 -- ============================================================================
@@ -1146,10 +1178,10 @@ create policy "table_locks: tomar mesa" on public.table_locks for insert to auth
 create policy "table_locks: liberar mesa propia o jefe" on public.table_locks for delete to authenticated
   using (user_id = public.current_user_id() or public.is_jefe());
 
--- ---- pedidos: jefe ve todo, mesero crea y ve (cocinero no tiene la vista Vender) ----
+-- ---- pedidos: jefe ve todo, mesero crea y ve, cocinero solo lee (pantalla Pedidos) ----
 
-create policy "orders: lectura jefe y mesero" on public.orders for select to authenticated using (
-  public.is_jefe() or public.current_user_role() = 'mesero'
+create policy "orders: lectura jefe mesero y cocinero" on public.orders for select to authenticated using (
+  public.is_jefe() or public.current_user_role() in ('mesero', 'cocinero')
 );
 create policy "orders: crear jefe y mesero" on public.orders for insert to authenticated with check (
   (public.is_jefe() or public.current_user_role() = 'mesero') and user_id = public.current_user_id()
@@ -1157,8 +1189,8 @@ create policy "orders: crear jefe y mesero" on public.orders for insert to authe
 create policy "orders: editar jefe" on public.orders for update to authenticated using (public.is_jefe()) with check (public.is_jefe());
 create policy "orders: borrar jefe" on public.orders for delete to authenticated using (public.is_jefe());
 
-create policy "order_items: lectura jefe y mesero" on public.order_items for select to authenticated using (
-  public.is_jefe() or public.current_user_role() = 'mesero'
+create policy "order_items: lectura jefe mesero y cocinero" on public.order_items for select to authenticated using (
+  public.is_jefe() or public.current_user_role() in ('mesero', 'cocinero')
 );
 create policy "order_items: crear jefe y mesero" on public.order_items for insert to authenticated with check (
   exists (

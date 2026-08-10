@@ -55,6 +55,20 @@ export function ChecklistClient({ date, userId, role, entries, photoUrls }: Prop
     await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, areas: nextAreas });
   }
 
+  async function markAllArea(section: string, area: string, items: string[]) {
+    const nextAreas: NestedAreas = { ...sections[section].areas, [area]: Object.fromEntries(items.map((i) => [i, true])) };
+    setSections((prev) => ({ ...prev, [section]: { ...prev[section], areas: nextAreas } }));
+    await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, areas: nextAreas });
+  }
+
+  async function markAllSection(section: string, items: Record<string, string[]>) {
+    const nextAreas: NestedAreas = Object.fromEntries(
+      Object.entries(items).map(([area, list]) => [area, Object.fromEntries(list.map((i) => [i, true]))]),
+    );
+    setSections((prev) => ({ ...prev, [section]: { ...prev[section], areas: nextAreas } }));
+    await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, areas: nextAreas });
+  }
+
   async function uploadPhoto(section: string, file: File | undefined) {
     if (!file) return;
     showToast("Guardando foto…");
@@ -96,6 +110,8 @@ export function ChecklistClient({ date, userId, role, entries, photoUrls }: Prop
             items={APERTURA_ITEMS}
             state={sections.apertura}
             onToggleItem={(a, i, c) => toggleItem("apertura", a, i, c)}
+            onMarkAllArea={(a, list) => markAllArea("apertura", a, list)}
+            onMarkAllSection={() => markAllSection("apertura", APERTURA_ITEMS)}
             onPhoto={(f) => uploadPhoto("apertura", f)}
           />
           <AreaSection
@@ -103,6 +119,8 @@ export function ChecklistClient({ date, userId, role, entries, photoUrls }: Prop
             items={CIERRE_ITEMS}
             state={sections.cierre}
             onToggleItem={(a, i, c) => toggleItem("cierre", a, i, c)}
+            onMarkAllArea={(a, list) => markAllArea("cierre", a, list)}
+            onMarkAllSection={() => markAllSection("cierre", CIERRE_ITEMS)}
             onPhoto={(f) => uploadPhoto("cierre", f)}
           />
         </>
@@ -175,12 +193,16 @@ function AreaSection({
   items,
   state,
   onToggleItem,
+  onMarkAllArea,
+  onMarkAllSection,
   onPhoto,
 }: {
   title: string;
   items: Record<string, string[]>;
   state: SectionState;
   onToggleItem: (area: string, item: string, checked: boolean) => void;
+  onMarkAllArea: (area: string, items: string[]) => void;
+  onMarkAllSection: () => void;
   onPhoto: (f: File | undefined) => void;
 }) {
   const [openArea, setOpenArea] = useState<string | null>(null);
@@ -189,7 +211,14 @@ function AreaSection({
   return (
     <Section title={title}>
       <div className="rounded-xl border border-border bg-surface p-3.5">
-        <div className="mb-2 flex justify-end">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={onMarkAllSection}
+            className="rounded-lg border border-gold/40 px-2.5 py-1 text-[10.5px] font-bold text-gold"
+          >
+            ✓ Marcar todo
+          </button>
           <StatusPill done={overallDone} />
         </div>
         {Object.entries(items).map(([area, list]) => {
@@ -225,6 +254,15 @@ function AreaSection({
                       {item}
                     </label>
                   ))}
+                  {!areaDone && (
+                    <button
+                      type="button"
+                      onClick={() => onMarkAllArea(area, list)}
+                      className="mt-1 text-[10.5px] font-bold text-gold underline underline-offset-2"
+                    >
+                      Marcar toda esta área
+                    </button>
+                  )}
                 </div>
               )}
             </div>
