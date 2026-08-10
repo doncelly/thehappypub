@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Cheddar Gothic Serif — fuente de marca real de The Happy Pub.
+  El archivo .ttf lo tiene el dueño por fuera de este HTML (no estaba embebido de forma
+  reutilizable). Cuando lo pases, colócalo en /public/fonts/CheddarGothicSerif.ttf y este
+  @font-face quedará activo. Mientras tanto cae a Georgia/serif (fallback ya definido
+  en tailwind.config.ts: display -> 'Cheddar Gothic Serif', Bevan, serif).
+*/
+@font-face {
+  font-family: "Cheddar Gothic Serif";
+  src: url("/fonts/CheddarGothicSerif.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-text font-body antialiased;
+    background-image: radial-gradient(
+      ellipse 900px 500px at 15% -10%,
+      rgba(232, 163, 61, 0.08),
+      transparent 60%
+    );
+  }
+}

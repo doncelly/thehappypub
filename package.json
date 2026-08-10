@@ -1,0 +1,35 @@
+{
+  "name": "thehappypub",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "supabase:types": "supabase gen types typescript --project-id $NEXT_PUBLIC_SUPABASE_PROJECT_ID --schema public > src/lib/types/database.types.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.4",
+    "bcryptjs": "^2.4.3",
+    "google-auth-library": "^11.0.0",
+    "jspdf": "^4.2.1",
+    "next": "^16.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.14.10",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "^16.3.0",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6",
+    "typescript": "^5.5.3"
+  }
+}
