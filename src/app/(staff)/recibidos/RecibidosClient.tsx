@@ -366,9 +366,9 @@ function PurchaseOrderForm({
             <input type="number" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="Ej: 24" className={inputCls} />
           </div>
         </div>
-        <div>
+        <div className="min-w-0 overflow-hidden">
           <FieldLabel>Fecha esperada</FieldLabel>
-          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={inputCls} />
+          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className={`${inputCls} min-w-0 appearance-none`} />
         </div>
         <button
           onClick={submit}
