@@ -208,19 +208,19 @@ export function PersonalClient({ users, rates, geofence }: Props) {
             {sorted.map((u) => {
               const isLastJefe = u.role === "jefe" && u.active && activeJefes <= 1;
               return (
-                <div key={u.id} className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2.5">
-                  <div className="flex h-8 w-8 flex-none items-center justify-center rounded-full border border-border bg-surface-2 text-[11px] font-bold text-gold">
-                    {u.name
-                      .trim()
-                      .split(/\s+/)
-                      .map((w) => w[0])
-                      .slice(0, 2)
-                      .join("")
-                      .toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5 text-[12.5px] font-semibold">
-                      {u.name}
+                <div key={u.id} className="rounded-xl border border-border bg-surface px-3 py-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 flex-none items-center justify-center rounded-full border border-border bg-surface-2 text-[11px] font-bold text-gold">
+                      {u.name
+                        .trim()
+                        .split(/\s+/)
+                        .map((w) => w[0])
+                        .slice(0, 2)
+                        .join("")
+                        .toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1 flex-wrap items-center gap-1.5 text-[12.5px] font-semibold sm:flex">
+                      <div className="truncate">{u.name}</div>
                       <span
                         className={`rounded px-1.5 py-0.5 font-mono text-[8.5px] uppercase ${
                           u.role === "jefe" ? "bg-gold/20 text-gold" : "bg-text-dim/15 text-text-dim"
@@ -231,7 +231,7 @@ export function PersonalClient({ users, rates, geofence }: Props) {
                       {!u.active && <span className="rounded bg-red/15 px-1.5 py-0.5 font-mono text-[8.5px] uppercase text-red">Inactivo</span>}
                     </div>
                   </div>
-                  <div className="flex flex-none flex-wrap justify-end gap-1.5">
+                  <div className="mt-2 flex flex-wrap justify-end gap-1.5">
                     <MiniButton onClick={() => resetPin(u.id)}>Restablecer PIN</MiniButton>
                     {u.active ? (
                       <MiniButton variant="warn" onClick={() => toggleActive(u)} disabled={isLastJefe}>
