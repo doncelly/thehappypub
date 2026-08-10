@@ -139,13 +139,13 @@ export function AsistenciaSection({ date, attendance, users, onChanged }: Props)
                     type="time"
                     value={editFor(a.user_id, a.work_type).entrada}
                     onChange={(e) => setEdits((prev) => ({ ...prev, [editKey(a.user_id, a.work_type)]: { ...editFor(a.user_id, a.work_type), entrada: e.target.value } }))}
-                    className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] text-text"
+                    className="min-w-0 flex-1 appearance-none rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] text-text"
                   />
                   <input
                     type="time"
                     value={editFor(a.user_id, a.work_type).salida}
                     onChange={(e) => setEdits((prev) => ({ ...prev, [editKey(a.user_id, a.work_type)]: { ...editFor(a.user_id, a.work_type), salida: e.target.value } }))}
-                    className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] text-text"
+                    className="min-w-0 flex-1 appearance-none rounded-md border border-border bg-surface px-2 py-1.5 text-[12px] text-text"
                   />
                 </div>
                 <div className="mt-1.5 flex justify-end">
@@ -165,9 +165,9 @@ export function AsistenciaSection({ date, attendance, users, onChanged }: Props)
             <FieldLabel>Persona (registro manual)</FieldLabel>
             <input value={newPerson} onChange={(e) => setNewPerson(e.target.value)} list="agendaUserNames" placeholder="Ej: María" className={inputCls} />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 overflow-hidden">
             <FieldLabel>Entrada</FieldLabel>
-            <input type="time" value={newEntrada} onChange={(e) => setNewEntrada(e.target.value)} className={inputCls} />
+            <input type="time" value={newEntrada} onChange={(e) => setNewEntrada(e.target.value)} className={`${inputCls} min-w-0 appearance-none`} />
           </div>
         </div>
         {matchedNewUser?.role === "jefe" && (
@@ -181,7 +181,7 @@ export function AsistenciaSection({ date, attendance, users, onChanged }: Props)
         )}
         <div>
           <FieldLabel>Salida (opcional)</FieldLabel>
-          <input type="time" value={newSalida} onChange={(e) => setNewSalida(e.target.value)} className={inputCls} />
+          <input type="time" value={newSalida} onChange={(e) => setNewSalida(e.target.value)} className={`${inputCls} min-w-0 appearance-none`} />
         </div>
         <MiniButton onClick={addManual} disabled={saving === "__new__"}>
           + Agregar registro manual

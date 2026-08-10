@@ -160,9 +160,9 @@ export function CajaSection({ date, cashRegister: c, purchases, transportAid, ve
               <FieldLabel>Responsable</FieldLabel>
               <input value={aperResp} onChange={(e) => setAperResp(e.target.value)} list="cajaUserNames" placeholder="Ej: Nathaly D" className={inputCls} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 overflow-hidden">
               <FieldLabel>Hora</FieldLabel>
-              <input type="time" value={aperHora} onChange={(e) => setAperHora(e.target.value)} className={inputCls} />
+              <input type="time" value={aperHora} onChange={(e) => setAperHora(e.target.value)} className={`${inputCls} min-w-0 appearance-none`} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
@@ -207,9 +207,9 @@ export function CajaSection({ date, cashRegister: c, purchases, transportAid, ve
               <FieldLabel>Responsable</FieldLabel>
               <input value={cierreResp} onChange={(e) => setCierreResp(e.target.value)} list="cajaUserNames" placeholder="Ej: Nathaly D" className={inputCls} />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 overflow-hidden">
               <FieldLabel>Hora</FieldLabel>
-              <input type="time" value={cierreHora} onChange={(e) => setCierreHora(e.target.value)} className={inputCls} />
+              <input type="time" value={cierreHora} onChange={(e) => setCierreHora(e.target.value)} className={`${inputCls} min-w-0 appearance-none`} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
