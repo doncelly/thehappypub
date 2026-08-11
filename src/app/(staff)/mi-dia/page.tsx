@@ -23,6 +23,8 @@ export default async function MiDiaPage() {
     { data: rates, error: ratesError },
     { data: shiftsToday, error: shiftsError },
     { data: myBonus, error: bonusError },
+    { data: cashRegisterToday, error: cashError },
+    { data: myChecklistInventario, error: checklistError },
   ] = await Promise.all([
     supabase.from("agenda_days").select("promo, event, daily_goal").eq("date", today).maybeSingle(),
     supabase.from("orders").select("total").gte("created_at", todayRange.start).lte("created_at", todayRange.end),
@@ -32,6 +34,8 @@ export default async function MiDiaPage() {
     supabase.from("hourly_rates").select("*").eq("id", 1).maybeSingle(),
     supabase.from("shifts").select("*").eq("date", today),
     supabase.from("bonuses").select("*").eq("date", today).eq("user_id", user.id).maybeSingle(),
+    supabase.from("cash_register").select("base_amount, open_time").eq("date", today).maybeSingle(),
+    supabase.from("checklist_entries").select("done").eq("date", today).eq("user_id", user.id).eq("section", "inventario").maybeSingle(),
   ]);
 
   for (const [label, error] of Object.entries({
@@ -43,6 +47,8 @@ export default async function MiDiaPage() {
     ratesError,
     shiftsError,
     bonusError,
+    cashError,
+    checklistError,
   })) {
     logSupabaseError(`MiDiaPage ${label}`, error);
   }
@@ -62,6 +68,8 @@ export default async function MiDiaPage() {
       shiftsToday={shiftsToday ?? []}
       myBonus={myBonus}
       scheduleUrl={signedSchedule?.signedUrl ?? null}
+      cajaAbiertaHoy={cashRegisterToday?.base_amount != null}
+      inventarioListoHoy={myChecklistInventario?.done === true}
     />
   );
 }

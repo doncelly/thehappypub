@@ -2,7 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtCOP, fmtDateLabel, fmtHM, lastNDays, bogotaDayRangeUTC, bogotaDateOf } from "@/lib/format";
-import { computeAutoPuntualidad } from "@/lib/bonos";
+import { computeAutoPuntualidadPuntos, PUNTUALIDAD_META_SEMANAL } from "@/lib/bonos";
 import { createReportDoc, HAPPY_GOLD, GRAY } from "@/lib/pdf";
 import { buildCajaCsvRows, rowsToCsvString } from "@/lib/caja-csv";
 
@@ -80,9 +80,9 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
   line("Resumen por empleado (semana)", 13, HAPPY_GOLD, true);
   space(1);
 
-  type EmpStat = { name: string; dias: number; puntual: number; servicioOk: number; tareasOk: number; tareasTot: number; ventas: number };
+  type EmpStat = { name: string; dias: number; puntualidadPts: number; servicioOk: number; tareasOk: number; tareasTot: number; ventas: number };
   const empStats: Record<string, EmpStat> = {};
-  for (const u of users ?? []) empStats[u.id] = { name: u.name, dias: 0, puntual: 0, servicioOk: 0, tareasOk: 0, tareasTot: 0, ventas: 0 };
+  for (const u of users ?? []) empStats[u.id] = { name: u.name, dias: 0, puntualidadPts: 0, servicioOk: 0, tareasOk: 0, tareasTot: 0, ventas: 0 };
 
   for (const d of days) {
     for (const t of (shifts ?? []).filter((s) => s.date === d)) {
@@ -91,7 +91,8 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
       const stat = empStats[u.id];
       stat.dias++;
       const checkIn = attendanceByDateUser[d]?.[u.id]?.check_in ?? null;
-      if (computeAutoPuntualidad(t.schedule_label, checkIn) === true) stat.puntual++;
+      const pts = computeAutoPuntualidadPuntos(t.schedule_label, checkIn);
+      if (pts !== null) stat.puntualidadPts += pts;
       const manual = bonusByDateUser[d]?.[u.id];
       if (manual) {
         if (manual.service === true) stat.servicioOk++;
@@ -108,8 +109,9 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
   }
 
   for (const stat of Object.values(empStats).filter((e) => e.dias > 0)) {
+    const cumpleMeta = stat.puntualidadPts >= PUNTUALIDAD_META_SEMANAL;
     line(
-      `${stat.name}: ${stat.dias} días · puntual ${stat.puntual}/${stat.dias} · servicio OK ${stat.servicioOk} · tareas OK ${stat.tareasOk}/${stat.tareasTot} · ventas atribuidas ${fmtCOP(stat.ventas)}`,
+      `${stat.name}: ${stat.dias} días · puntualidad ${stat.puntualidadPts}/${PUNTUALIDAD_META_SEMANAL} pts${cumpleMeta ? " ✓" : ""} · servicio OK ${stat.servicioOk} · tareas OK ${stat.tareasOk}/${stat.tareasTot} · ventas atribuidas ${fmtCOP(stat.ventas)}`,
       9,
     );
   }

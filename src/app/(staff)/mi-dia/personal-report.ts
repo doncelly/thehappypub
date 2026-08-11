@@ -3,7 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtCOP, fmtDateLabel, fmtHM, lastNDays, bogotaDayRangeUTC, bogotaDateOf } from "@/lib/format";
 import { shiftEarnings, type Rates, type WorkType } from "@/lib/earnings";
-import { computeAutoVentas, computeAutoPuntualidad } from "@/lib/bonos";
+import { computeAutoVentas, computeAutoPuntualidadPuntos, PUNTUALIDAD_META_SEMANAL } from "@/lib/bonos";
 import { createReportDoc, HAPPY_GOLD, GRAY } from "@/lib/pdf";
 
 const WORK_TYPE_LABEL: Record<WorkType, string> = { mesero: "Mesero", cocinero: "Cocinero", administracion: "Administración" };
@@ -62,15 +62,17 @@ export async function generatePersonalReportPdf(supabase: SupabaseClient<any>, t
   line("Tus calificaciones (bonificaciones)", 12, HAPPY_GOLD, true);
   space(1);
   const myName = user.name.trim().toLowerCase();
+  let puntualidadPtsPeriodo = 0;
   for (const d of days) {
     const hasTurno = (shifts ?? []).some((t) => t.date === d && t.person_name.trim().toLowerCase() === myName);
     if (!hasTurno) continue;
     const myShift = (shifts ?? []).find((t) => t.date === d && t.person_name.trim().toLowerCase() === myName);
     const checkIn = (attendance ?? []).find((a) => a.date === d)?.check_in ?? null;
     const ventasOk = computeAutoVentas(goalByDate[d], ventasByDate[d] ?? 0);
-    const puntualOk = computeAutoPuntualidad(myShift?.schedule_label, checkIn);
+    const puntualPts = computeAutoPuntualidadPuntos(myShift?.schedule_label, checkIn);
+    if (puntualPts !== null) puntualidadPtsPeriodo += puntualPts;
     const manual = (bonuses ?? []).find((b) => b.date === d);
-    const parts = [`Ventas ${ventasOk === true ? "✓" : ventasOk === false ? "✗" : "—"}`, `Puntualidad ${puntualOk === true ? "✓" : puntualOk === false ? "✗" : "—"}`];
+    const parts = [`Ventas ${ventasOk === true ? "✓" : ventasOk === false ? "✗" : "—"}`, `Puntualidad ${puntualPts !== null ? `${puntualPts} pts` : "—"}`];
     if (manual) {
       parts.push(`Servicio ${manual.service === true ? "✓" : manual.service === false ? "✗" : "—"}`);
       for (const [label, key] of [
@@ -85,6 +87,8 @@ export async function generatePersonalReportPdf(supabase: SupabaseClient<any>, t
     }
     line(`${fmtDateLabel(d)}: ${parts.join(" · ")}`, 8.5);
   }
+  space(2);
+  line(`Puntualidad acumulada del periodo: ${puntualidadPtsPeriodo} pts (meta semanal: ${PUNTUALIDAD_META_SEMANAL} pts)`, 9, HAPPY_GOLD, true);
 
   if (ratings && ratings.length > 0) {
     space(5);

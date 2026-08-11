@@ -43,6 +43,8 @@ type Props = {
   shiftsToday: Shift[];
   myBonus: Bonus;
   scheduleUrl: string | null;
+  cajaAbiertaHoy: boolean;
+  inventarioListoHoy: boolean;
 };
 
 const GEO_POLL_MS = 60_000;
@@ -212,8 +214,34 @@ export function MiDiaClient(props: Props) {
   const b = props.myBonus;
   const ventasOK = props.agendaDay?.daily_goal ? props.ventasHoy >= props.agendaDay.daily_goal : null;
 
+  // Punto 11 del backlog: recordar el orden de actividades al llegar (1ª
+  // apertura de caja, 2ª inventario diario) — solo un aviso, no bloquea nada.
+  // Aplica a jefe/mesero (quienes abren caja); cocinero no la abre y por eso
+  // no ve este aviso. La 2ª actividad (inventario) solo la puede completar el
+  // mesero, porque Checklist no está disponible para el jefe.
+  const hasCheckedInToday = attendanceList.some((a) => a.check_in);
+  const showAperturaBanner = (isMesero || user.role === "jefe") && hasCheckedInToday && !props.cajaAbiertaHoy;
+  const showInventarioBanner = isMesero && hasCheckedInToday && props.cajaAbiertaHoy && !props.inventarioListoHoy;
+
   return (
     <div>
+      {showAperturaBanner && (
+        <a
+          href="/caja"
+          className="mb-4 block rounded-xl border border-amber/50 bg-amber/10 p-3 text-[12px] font-semibold text-amber"
+        >
+          ⚠️ Actividad 1 de hoy: falta abrir la caja.
+        </a>
+      )}
+      {showInventarioBanner && (
+        <a
+          href="/checklist"
+          className="mb-4 block rounded-xl border border-amber/50 bg-amber/10 p-3 text-[12px] font-semibold text-amber"
+        >
+          ⚠️ Actividad 2 de hoy: falta el inventario diario (Checklist).
+        </a>
+      )}
+
       <div className="mb-4 rounded-2xl border border-amber/30 bg-gradient-to-br from-amber/10 to-orange/5 p-3.5">
         {props.agendaDay?.promo && (
           <div className="text-[11.5px]">

@@ -168,6 +168,11 @@ Pega este archivo completo como primer mensaje. El asistente debe:
   (`toggleDone`/`toggleItem`/`markAllArea`/`markAllSection` en
   `ChecklistClient.tsx`) — verificado en vivo que ahora sí avisa si el
   guardado falla, en vez de mostrar "Listo" en falso.
+- **Paso 15** — Puntualidad en puntos (5/3/0, meta semanal 35, ver punto 14
+  de "Qué falta") + aviso no-bloqueante de orden de actividades al llegar
+  (apertura de caja → inventario diario, ver punto 11 de "Qué falta").
+  Ninguno de los dos requirió cambio de schema — ambos se calculan en vivo
+  o leen tablas ya existentes.
 
 ## Migraciones SQL — MUY IMPORTANTE
 
@@ -312,11 +317,15 @@ antes de asumir**, no inventar reglas.
 10. ✅ **Alerta de descuadre si la caja de ayer no cuadra** — hecho. Banner
     rojo en Panel si `|efectivo+tarjetas contado − ventas app| > $1.000`
     (misma tolerancia que ya usaba Caja para su propio indicador inline).
-11. **Forzar orden de actividades al llegar**: 1° apertura de caja, luego
-    inventario diario, con una "2da actividad" definida — nuevo, es una
-    restricción de flujo (no dejar hacer X sin haber hecho Y primero). Muy
-    ligado al punto 12 (checklist de alistamiento reestructurado) — probable
-    que se resuelvan juntos.
+11. ✅ **Forzar orden de actividades al llegar** — hecho, pero como AVISO no
+    bloqueante (decidido con el usuario 11 ago 2026, para no arriesgar dejar
+    al equipo trabado en vivo si algo falla). En Mi día, después de marcar
+    llegada: si falta abrir caja aparece un banner "Actividad 1 de hoy: falta
+    abrir la caja" (link a /caja); una vez abierta, si el mesero no marcó
+    "Inventario" en el Checklist aparece "Actividad 2 de hoy: falta el
+    inventario diario" (link a /checklist). Solo aplica a jefe/mesero (quienes
+    abren caja); cocinero no la ve. La 2ª actividad solo la puede completar el
+    mesero (Checklist no es accesible para jefe). Nada se bloquea de verdad.
 12. ✅ **Checklist de "Alistamiento" reestructurado en sub-secciones** —
     hecho: 1.1 Apertura de caja, 1.2 Inventarios y documentos de sanidad,
     1.3 Organización de espacios, 1.4 Limpieza de cristalería, 1.5 Actividad
@@ -330,13 +339,20 @@ antes de asumir**, no inventar reglas.
     un archivo. Falta: ¿se debe guardar cada semana generada en Storage
     (como ya se hace con el horario) para poder verlas después agrupadas
     por año?
-14. **Revisar cálculo de puntualidad**: el usuario da la regla exacta —
-    llega a tiempo o dentro de los primeros 10 min → 5 puntos; 11-15 min →
-    3 puntos; después → 0 puntos y se van descontando puntos por tardanza;
-    meta semanal para bonificación = 35 puntos. Comparar contra
-    `computeAutoPuntualidad` en `src/lib/bonos.ts` (hoy es un booleano
-    true/false/null, no un sistema de puntos) — probablemente hay que
-    rediseñar esa función y cómo se acumula/muestra el puntaje semanal.
+14. ✅ **Cálculo de puntualidad en puntos** — hecho. `computeAutoPuntualidadPuntos`
+    en `src/lib/bonos.ts` (reemplazó el booleano `computeAutoPuntualidad`):
+    a tiempo o hasta 10 min tarde = 5 pts, 11-15 min = 3 pts, más de 15 min =
+    0 pts (la escala tiered ES el "descuento" — no hay resta adicional sobre
+    un acumulado). `PUNTUALIDAD_META_SEMANAL = 35`. Se muestra: puntos del día
+    en Calificación del equipo (Agenda) + acumulado semanal (lunes-domingo,
+    nueva query en `agenda/page.tsx`) contra la meta de 35 junto a cada
+    persona; en el PDF semanal de Panel (`panel/reports.ts`) reemplazó
+    "puntual X/Y días" por "puntualidad X/35 pts"; en el reporte personal
+    (`mi-dia/personal-report.ts`) cada día muestra los puntos ganados +
+    acumulado del periodo de 14 días. Ninguno de estos totales se persiste —
+    se recalculan en vivo igual que antes, mismo patrón que ventas/puntualidad
+    ya tenían. **No toca dinero/bonificación** (eso sigue siendo el punto 15,
+    que sigue sin la tabla de conversión puntos↔pesos).
 15. **Bonificación diaria basada en % de venta adicional → puntos → plata**:
     "sacar el porcentaje de lo que se ganó adicional para dar los puntos,
     puntos equivalente a plata". Revisar `computeAutoVentas` en
@@ -357,9 +373,9 @@ antes de asumir**, no inventar reglas.
 
 ### Notas para retomar
 
-- Los puntos 3, 4, 5, 8, 10, 11, 12, 13, 14, 15, 17 necesitan al menos una
-  pregunta de negocio antes de implementar — no asumir números, nombres de
-  items, ni reglas de cálculo.
+- Quedan pendientes de una decisión de negocio antes de implementar: 5
+  (contradicción sin resolver, ver arriba), 13, 15, 17. No asumir números,
+  nombres de items, ni reglas de cálculo en esos.
 - Los puntos 6, 9, 16 se pueden resolver revisando/mejorando lo que ya
   existe, sin necesitar tanta info nueva del usuario.
 - Dado el volumen, conviene ir en tandas chicas y confirmar con el usuario
