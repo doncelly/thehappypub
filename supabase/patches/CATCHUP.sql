@@ -1,7 +1,12 @@
 -- ============================================================================
--- CATCHUP: todos los patches 0001-0015 en un solo archivo, seguro de correr
+-- CATCHUP: todos los patches hasta 0015 en un solo archivo, seguro de correr
 -- las veces que sea (cada pieza revisa si ya existe antes de crearla). Úsalo
 -- en vez de ir patch por patch — corre esto una vez y quedas al día.
+--
+-- Este archivo SIEMPRE se llama CATCHUP.sql (nombre fijo, no cambia con cada
+-- patch nuevo) — así el link/atajo a este archivo nunca se rompe. Si ves un
+-- número más alto que 0015 en supabase/patches/, este archivo ya no está al
+-- día — pídele a Claude que lo regenere.
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
