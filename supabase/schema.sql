@@ -93,7 +93,8 @@ create table public.shift_schedule_templates (
   slot_label     text not null,
   schedule_label text,
   default_person text, -- sugerido al elegir el slot en Turnos; sigue siendo editable, no todos los slots rotan
-  sort_order     integer not null default 0
+  sort_order     integer not null default 0,
+  constraint shift_schedule_templates_slot_unique unique (weekday, shift_type, slot_label)
 );
 comment on table public.shift_schedule_templates is 'Plantilla editable de horarios por slot de turno y día de semana — ver Agenda → Plantilla.';
 

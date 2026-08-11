@@ -61,12 +61,14 @@ export function PlantillaSection({ weekdayTemplates, shiftScheduleTemplates, def
   const [slotSchedule, setSlotSchedule] = useState("");
   const [slotPerson, setSlotPerson] = useState("");
   const [savingSlot, setSavingSlot] = useState(false);
+  const [slotError, setSlotError] = useState<string | null>(null);
 
   async function addSlot() {
     if (!slotLabel.trim()) return;
     setSavingSlot(true);
+    setSlotError(null);
     try {
-      await supabase.from("shift_schedule_templates").insert({
+      const { error } = await supabase.from("shift_schedule_templates").insert({
         weekday,
         shift_type: slotType,
         slot_label: slotLabel.trim(),
@@ -74,6 +76,12 @@ export function PlantillaSection({ weekdayTemplates, shiftScheduleTemplates, def
         default_person: slotPerson.trim() || null,
         sort_order: slots.length + 1,
       });
+      if (error) {
+        setSlotError(
+          error.code === "23505" ? `Ya existe un slot "${slotLabel.trim()}" para este día — edítalo en la lista de arriba.` : error.message,
+        );
+        return;
+      }
       setSlotLabel("");
       setSlotSchedule("");
       setSlotPerson("");
@@ -230,6 +238,7 @@ export function PlantillaSection({ weekdayTemplates, shiftScheduleTemplates, def
           <FieldLabel>Horario</FieldLabel>
           <input value={slotSchedule} onChange={(e) => setSlotSchedule(e.target.value)} placeholder="Ej: 19:00 A CIERRE" className={inputCls} />
         </div>
+        {slotError && <p className="text-[11px] text-red">{slotError}</p>}
         <MiniButton onClick={addSlot} disabled={savingSlot || !slotLabel.trim()}>
           + Agregar slot
         </MiniButton>

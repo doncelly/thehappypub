@@ -512,7 +512,8 @@ insert into public.shift_schedule_templates (weekday, shift_type, slot_label, sc
   (6, 'mesa',   'Mesas 1',  '14:00 A CIERRE', 'Sol', 1),
   (6, 'mesa',   'Mesas 2',  '19:00 A CIERRE', 'Javier', 2),
   (0, 'cocina', 'Cocina 1', '13:00 A CIERRE', null, 1),
-  (0, 'mesa',   'Mesas 1',  '13:00 A CIERRE', 'Sol', 1);
+  (0, 'mesa',   'Mesas 1',  '13:00 A CIERRE', 'Sol', 1)
+on conflict (weekday, shift_type, slot_label) do nothing;
 
 -- ============================================================================
 -- Fin del seed. El primer jefe se crea desde /login (Paso 3), no acá — su PIN
