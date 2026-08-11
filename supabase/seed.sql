@@ -493,24 +493,26 @@ insert into public.weekday_templates (weekday, start_time, shift_admin, daily_go
 -- Horario por slot: cuántos meseros hay cada día viene directo de la
 -- plantilla real — jueves, viernes y sábado tienen Mesas 1 y Mesas 2; el
 -- resto de la semana solo un mesero cubre el turno.
-insert into public.shift_schedule_templates (weekday, shift_type, slot_label, schedule_label, sort_order) values
-  (1, 'cocina', 'Cocina 1', '15:30 A CIERRE', 1),
-  (1, 'mesa',   'Mesas 1',  '15:30 A CIERRE', 1),
-  (2, 'cocina', 'Cocina 1', '16:00 A CIERRE', 1),
-  (2, 'mesa',   'Mesas 2',  '16:00 A CIERRE', 2),
-  (3, 'cocina', 'Cocina 1', '16:00 A CIERRE', 1),
-  (3, 'mesa',   'Mesas 1',  '16:00 A CIERRE', 1),
-  (4, 'cocina', 'Cocina 1', '15:00 A CIERRE', 1),
-  (4, 'mesa',   'Mesas 1',  '15:00 A CIERRE', 1),
-  (4, 'mesa',   'Mesas 2',  '19:00 A CIERRE', 2),
-  (5, 'cocina', 'Cocina 1', '14:00 A CIERRE', 1),
-  (5, 'mesa',   'Mesas 1',  '19:00 A CIERRE', 1),
-  (5, 'mesa',   'Mesas 2',  '14:00 A CIERRE', 2),
-  (6, 'cocina', 'Cocina 1', '14:00 A CIERRE', 1),
-  (6, 'mesa',   'Mesas 1',  '14:00 A CIERRE', 1),
-  (6, 'mesa',   'Mesas 2',  '19:00 A CIERRE', 2),
-  (0, 'cocina', 'Cocina 1', '13:00 A CIERRE', 1),
-  (0, 'mesa',   'Mesas 1',  '13:00 A CIERRE', 1);
+-- default_person: Sol siempre cubre Mesas 1, Javier siempre Mesas 2 — sigue
+-- editable por si cambia; Cocina 1 no tiene persona fija (rota).
+insert into public.shift_schedule_templates (weekday, shift_type, slot_label, schedule_label, default_person, sort_order) values
+  (1, 'cocina', 'Cocina 1', '15:30 A CIERRE', null, 1),
+  (1, 'mesa',   'Mesas 1',  '15:30 A CIERRE', 'Sol', 1),
+  (2, 'cocina', 'Cocina 1', '16:00 A CIERRE', null, 1),
+  (2, 'mesa',   'Mesas 2',  '16:00 A CIERRE', 'Javier', 2),
+  (3, 'cocina', 'Cocina 1', '16:00 A CIERRE', null, 1),
+  (3, 'mesa',   'Mesas 1',  '16:00 A CIERRE', 'Sol', 1),
+  (4, 'cocina', 'Cocina 1', '15:00 A CIERRE', null, 1),
+  (4, 'mesa',   'Mesas 1',  '15:00 A CIERRE', 'Sol', 1),
+  (4, 'mesa',   'Mesas 2',  '19:00 A CIERRE', 'Javier', 2),
+  (5, 'cocina', 'Cocina 1', '14:00 A CIERRE', null, 1),
+  (5, 'mesa',   'Mesas 1',  '19:00 A CIERRE', 'Sol', 1),
+  (5, 'mesa',   'Mesas 2',  '14:00 A CIERRE', 'Javier', 2),
+  (6, 'cocina', 'Cocina 1', '14:00 A CIERRE', null, 1),
+  (6, 'mesa',   'Mesas 1',  '14:00 A CIERRE', 'Sol', 1),
+  (6, 'mesa',   'Mesas 2',  '19:00 A CIERRE', 'Javier', 2),
+  (0, 'cocina', 'Cocina 1', '13:00 A CIERRE', null, 1),
+  (0, 'mesa',   'Mesas 1',  '13:00 A CIERRE', 'Sol', 1);
 
 -- ============================================================================
 -- Fin del seed. El primer jefe se crea desde /login (Paso 3), no acá — su PIN

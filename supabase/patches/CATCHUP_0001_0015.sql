@@ -1,5 +1,5 @@
 -- ============================================================================
--- CATCHUP: todos los patches 0001-0013 en un solo archivo, seguro de correr
+-- CATCHUP: todos los patches 0001-0015 en un solo archivo, seguro de correr
 -- las veces que sea (cada pieza revisa si ya existe antes de crearla). Úsalo
 -- en vez de ir patch por patch — corre esto una vez y quedas al día.
 -- ============================================================================
@@ -742,3 +742,47 @@ insert into public.shift_schedule_templates (weekday, shift_type, slot_label, sc
   (6, 'mesa',   'Mesas 2',  '19:00 A CIERRE', 2),
   (0, 'cocina', 'Cocina 1', '13:00 A CIERRE', 1),
   (0, 'mesa',   'Mesas 1',  '13:00 A CIERRE', 1);
+
+-- ---------------------------------------------------------------------------
+-- 0014_shift_default_person.sql
+-- ---------------------------------------------------------------------------
+-- Patch: sugerir quién cubre cada slot de turno (Sol → Mesas 1, Javier →
+-- Mesas 2) al elegirlo en Turnos — sigue siendo editable, Cocina 1 no tiene
+-- persona fija porque rota. Ya está reflejado en supabase/schema.sql y
+-- supabase/seed.sql para instalaciones nuevas — esto es solo para aplicarlo
+-- sobre el proyecto que ya corriste. Correr después de 0001-0013.
+
+alter table public.shift_schedule_templates add column if not exists default_person text;
+
+update public.shift_schedule_templates set default_person = 'Sol' where slot_label = 'Mesas 1';
+update public.shift_schedule_templates set default_person = 'Javier' where slot_label = 'Mesas 2';
+
+-- ---------------------------------------------------------------------------
+-- 0015_agenda_schedule_pdf.sql
+-- ---------------------------------------------------------------------------
+-- Patch: guarda el PDF de horario semanal en Storage (agenda-schedules/) y
+-- deja que cualquier autenticado (jefe, mesero, cocinero) lo lea; solo jefe
+-- puede generarlo/subirlo. Ya está reflejado en supabase/schema.sql para
+-- instalaciones nuevas — esto es solo para aplicarlo sobre el proyecto que ya
+-- corriste. Correr después de 0001-0014.
+
+drop policy if exists "storage: checklist propio o jefe lee" on storage.objects;
+create policy "storage: checklist propio o jefe lee"
+on storage.objects for select to authenticated using (
+  bucket_id = 'happy-pub-photos' and (
+    public.is_jefe() or
+    ( (storage.foldername(name))[1] = 'checklist' and (storage.foldername(name))[3] = public.current_user_id()::text ) or
+    (storage.foldername(name))[1] = 'deliveries' or
+    (storage.foldername(name))[1] = 'agenda-schedules'
+  )
+);
+
+drop policy if exists "storage: checklist propio sube" on storage.objects;
+create policy "storage: checklist propio sube"
+on storage.objects for insert to authenticated with check (
+  bucket_id = 'happy-pub-photos' and (
+    ( (storage.foldername(name))[1] = 'checklist' and (storage.foldername(name))[3] = public.current_user_id()::text ) or
+    (storage.foldername(name))[1] = 'deliveries' or
+    ( (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe() )
+  )
+);

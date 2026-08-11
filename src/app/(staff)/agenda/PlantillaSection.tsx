@@ -59,6 +59,7 @@ export function PlantillaSection({ weekdayTemplates, shiftScheduleTemplates, def
   const [slotLabel, setSlotLabel] = useState("");
   const [slotType, setSlotType] = useState<"mesa" | "cocina">("mesa");
   const [slotSchedule, setSlotSchedule] = useState("");
+  const [slotPerson, setSlotPerson] = useState("");
   const [savingSlot, setSavingSlot] = useState(false);
 
   async function addSlot() {
@@ -70,10 +71,12 @@ export function PlantillaSection({ weekdayTemplates, shiftScheduleTemplates, def
         shift_type: slotType,
         slot_label: slotLabel.trim(),
         schedule_label: slotSchedule.trim() || null,
+        default_person: slotPerson.trim() || null,
         sort_order: slots.length + 1,
       });
       setSlotLabel("");
       setSlotSchedule("");
+      setSlotPerson("");
       onChanged();
     } finally {
       setSavingSlot(false);
@@ -82,6 +85,11 @@ export function PlantillaSection({ weekdayTemplates, shiftScheduleTemplates, def
 
   async function deleteSlot(id: string) {
     await supabase.from("shift_schedule_templates").delete().eq("id", id);
+    onChanged();
+  }
+
+  async function updateSlotPerson(id: string, defaultPerson: string) {
+    await supabase.from("shift_schedule_templates").update({ default_person: defaultPerson.trim() || null }).eq("id", id);
     onChanged();
   }
 
@@ -197,17 +205,7 @@ export function PlantillaSection({ weekdayTemplates, shiftScheduleTemplates, def
         ) : (
           <div className="space-y-1.5">
             {slots.map((s) => (
-              <div key={s.id} className="flex items-center gap-2.5 rounded-lg border border-border bg-surface-2 px-2.5 py-2">
-                <div className="min-w-0 flex-1 text-[11.5px]">
-                  <div className="font-bold">
-                    {s.slot_label} <span className="font-mono text-[9px] uppercase text-text-faint">{s.shift_type}</span>
-                  </div>
-                  {s.schedule_label && <div className="text-[10.5px] text-text-dim">{s.schedule_label}</div>}
-                </div>
-                <MiniButton variant="danger" onClick={() => deleteSlot(s.id)}>
-                  ✕
-                </MiniButton>
-              </div>
+              <SlotRow key={s.id} slot={s} onDelete={() => deleteSlot(s.id)} onSavePerson={(name) => updateSlotPerson(s.id, name)} />
             ))}
           </div>
         )}
@@ -225,6 +223,10 @@ export function PlantillaSection({ weekdayTemplates, shiftScheduleTemplates, def
           </div>
         </div>
         <div>
+          <FieldLabel>Persona sugerida (opcional — si siempre es la misma)</FieldLabel>
+          <input value={slotPerson} onChange={(e) => setSlotPerson(e.target.value)} placeholder="Ej: Sol" className={inputCls} />
+        </div>
+        <div>
           <FieldLabel>Horario</FieldLabel>
           <input value={slotSchedule} onChange={(e) => setSlotSchedule(e.target.value)} placeholder="Ej: 19:00 A CIERRE" className={inputCls} />
         </div>
@@ -233,5 +235,38 @@ export function PlantillaSection({ weekdayTemplates, shiftScheduleTemplates, def
         </MiniButton>
       </div>
     </Section>
+  );
+}
+
+function SlotRow({
+  slot,
+  onDelete,
+  onSavePerson,
+}: {
+  slot: ShiftScheduleTemplate;
+  onDelete: () => void;
+  onSavePerson: (name: string) => void;
+}) {
+  const [person, setPerson] = useState(slot.default_person ?? "");
+
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg border border-border bg-surface-2 px-2.5 py-2">
+      <div className="min-w-0 flex-1 text-[11.5px]">
+        <div className="font-bold">
+          {slot.slot_label} <span className="font-mono text-[9px] uppercase text-text-faint">{slot.shift_type}</span>
+        </div>
+        {slot.schedule_label && <div className="text-[10.5px] text-text-dim">{slot.schedule_label}</div>}
+        <input
+          value={person}
+          onChange={(e) => setPerson(e.target.value)}
+          onBlur={() => person !== (slot.default_person ?? "") && onSavePerson(person)}
+          placeholder="Persona sugerida"
+          className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-text"
+        />
+      </div>
+      <MiniButton variant="danger" onClick={onDelete}>
+        ✕
+      </MiniButton>
+    </div>
   );
 }

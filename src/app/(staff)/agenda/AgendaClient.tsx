@@ -22,6 +22,7 @@ import { TurnosSection } from "./TurnosSection";
 import { AsistenciaSection } from "./AsistenciaSection";
 import { CalificacionesSection } from "./CalificacionesSection";
 import { PlantillaSection } from "./PlantillaSection";
+import { generateAndSaveSchedulePdf } from "./schedule-pdf";
 
 type Props = {
   date: string;
@@ -74,9 +75,23 @@ export function AgendaClient(props: Props) {
   const [descCat, setDescCat] = useState(props.agendaDay?.discount_category ?? "todas");
   const [evento, setEvento] = useState(props.agendaDay?.event ?? template?.event ?? "");
   const [saving, setSaving] = useState(false);
+  const [pdfStatus, setPdfStatus] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   function goTo(newDate: string) {
     router.push(`/agenda?date=${newDate}`);
+  }
+
+  async function onGenerateSchedulePdf() {
+    setGeneratingPdf(true);
+    setPdfStatus(null);
+    try {
+      const monday = mondayOf(date);
+      const { error } = await generateAndSaveSchedulePdf(supabase, monday);
+      setPdfStatus(error ? `No se pudo generar: ${error}` : "Horario guardado ✓ — ya lo pueden descargar en Mi día.");
+    } finally {
+      setGeneratingPdf(false);
+    }
   }
 
   async function saveDay() {
@@ -231,6 +246,23 @@ export function AgendaClient(props: Props) {
         users={users}
         onChanged={() => router.refresh()}
       />
+
+      <Section title="Horario de la semana (PDF)">
+        <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
+          <p className="text-[11px] leading-relaxed text-text-faint">
+            Genera un PDF con los turnos ya asignados esta semana (lun-dom) y lo guarda para que meseros y cocinera lo descarguen
+            desde Mi día.
+          </p>
+          <button
+            onClick={onGenerateSchedulePdf}
+            disabled={generatingPdf}
+            className="w-full rounded-lg bg-gold py-2.5 text-[13px] font-bold text-[#1A140D] disabled:opacity-50"
+          >
+            {generatingPdf ? "Generando…" : "📄 Generar y guardar horario semanal"}
+          </button>
+          {pdfStatus && <p className="text-[11px] text-text-dim">{pdfStatus}</p>}
+        </div>
+      </Section>
 
       <AsistenciaSection date={date} attendance={props.attendance} users={users} onChanged={() => router.refresh()} />
 

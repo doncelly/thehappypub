@@ -42,6 +42,7 @@ type Props = {
   rates: Rates | null;
   shiftsToday: Shift[];
   myBonus: Bonus;
+  scheduleUrl: string | null;
 };
 
 const GEO_POLL_MS = 60_000;
@@ -242,6 +243,17 @@ export function MiDiaClient(props: Props) {
           </div>
         )}
       </div>
+
+      {props.scheduleUrl && (
+        <a
+          href={props.scheduleUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-4 flex items-center justify-center gap-2 rounded-xl border border-gold/40 bg-gold/10 py-2.5 text-[12.5px] font-bold text-gold"
+        >
+          📄 Ver horario de esta semana (PDF)
+        </a>
+      )}
 
       <Section title="Mi asistencia">
         {!fixedWorkType && (

@@ -92,6 +92,7 @@ create table public.shift_schedule_templates (
   shift_type     text not null check (shift_type in ('mesa','cocina')),
   slot_label     text not null,
   schedule_label text,
+  default_person text, -- sugerido al elegir el slot en Turnos; sigue siendo editable, no todos los slots rotan
   sort_order     integer not null default 0
 );
 comment on table public.shift_schedule_templates is 'Plantilla editable de horarios por slot de turno y día de semana — ver Agenda → Plantilla.';
@@ -1445,6 +1446,7 @@ grant select (id, name, active) on public.users to anon; -- solo lo mínimo para
 -- Bucket privado. Convención de rutas:
 --   checklist/{YYYY-MM-DD}/{user_id}/{section}.jpg
 --   deliveries/{delivery_id}/{producto|factura}.jpg
+--   agenda-schedules/{monday}.pdf — horario semanal, uno por semana (se sobrescribe)
 
 insert into storage.buckets (id, name, public)
 values ('happy-pub-photos', 'happy-pub-photos', false)
@@ -1455,7 +1457,8 @@ on storage.objects for select to authenticated using (
   bucket_id = 'happy-pub-photos' and (
     public.is_jefe() or
     ( (storage.foldername(name))[1] = 'checklist' and (storage.foldername(name))[3] = public.current_user_id()::text ) or
-    (storage.foldername(name))[1] = 'deliveries'
+    (storage.foldername(name))[1] = 'deliveries' or
+    (storage.foldername(name))[1] = 'agenda-schedules'
   )
 );
 
@@ -1463,7 +1466,8 @@ create policy "storage: checklist propio sube"
 on storage.objects for insert to authenticated with check (
   bucket_id = 'happy-pub-photos' and (
     ( (storage.foldername(name))[1] = 'checklist' and (storage.foldername(name))[3] = public.current_user_id()::text ) or
-    (storage.foldername(name))[1] = 'deliveries'
+    (storage.foldername(name))[1] = 'deliveries' or
+    ( (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe() )
   )
 );
 

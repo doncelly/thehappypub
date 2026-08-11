@@ -70,6 +70,7 @@ export type ShiftScheduleTemplate = {
   shift_type: "mesa" | "cocina";
   slot_label: string;
   schedule_label: string | null;
+  default_person: string | null;
   sort_order: number;
 };
 export type UserRow = {

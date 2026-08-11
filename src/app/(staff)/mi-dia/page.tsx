@@ -1,8 +1,10 @@
 import { requireRole } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { todayISO, quincenaRange, bogotaDayRangeUTC } from "@/lib/format";
+import { todayISO, mondayOf, quincenaRange, bogotaDayRangeUTC } from "@/lib/format";
 import { logSupabaseError } from "@/lib/log-supabase-error";
 import { MiDiaClient } from "./MiDiaClient";
+
+const SCHEDULE_BUCKET = "happy-pub-photos";
 
 export default async function MiDiaPage() {
   const user = await requireRole("jefe", "mesero", "cocinero");
@@ -10,6 +12,7 @@ export default async function MiDiaPage() {
   const today = todayISO();
   const quincena = quincenaRange();
   const todayRange = bogotaDayRangeUTC(today);
+  const monday = mondayOf(today);
 
   const [
     { data: agendaDay, error: agendaError },
@@ -44,6 +47,8 @@ export default async function MiDiaPage() {
     logSupabaseError(`MiDiaPage ${label}`, error);
   }
 
+  const { data: signedSchedule } = await supabase.storage.from(SCHEDULE_BUCKET).createSignedUrl(`agenda-schedules/${monday}.pdf`, 3600);
+
   return (
     <MiDiaClient
       date={today}
@@ -56,6 +61,7 @@ export default async function MiDiaPage() {
       rates={rates}
       shiftsToday={shiftsToday ?? []}
       myBonus={myBonus}
+      scheduleUrl={signedSchedule?.signedUrl ?? null}
     />
   );
 }

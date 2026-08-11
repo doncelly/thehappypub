@@ -41,6 +41,7 @@ export function TurnosSection({ date, shifts, defaultTasks, shiftScheduleTemplat
     setTipo(slot.shift_type);
     setArea(slot.slot_label);
     setHorario(slot.schedule_label ?? "");
+    setPerson(slot.default_person ?? "");
     setTarea(defaultTasks.find((t) => t.weekday === weekday && t.shift_type === slot.shift_type)?.task ?? "");
   }
 
