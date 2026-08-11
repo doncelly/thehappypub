@@ -2,9 +2,22 @@
 // se calculan siempre a partir de datos reales. Compartido entre
 // CalificacionesSection (Agenda) y el reporte PDF semanal (Panel).
 
-export function computeAutoVentas(dailyGoal: number | null, ventasDelDia: number): boolean | null {
-  return dailyGoal ? ventasDelDia >= dailyGoal : null;
+// Puntos por ventas del día (equipo completo, mismo dato que ya usaba el
+// check ✓/✗ de "Ventas"): no llega a la meta = 0, cumple hasta +10% sobre
+// meta = 5, +10-20% = 8, +20% o más = 10. Es venta que ya entró de más, por
+// eso el punto 15 del backlog lo trata como "autofinanciado".
+export function computeAutoVentasPuntos(dailyGoal: number | null, ventasDelDia: number): number | null {
+  if (!dailyGoal) return null;
+  if (ventasDelDia < dailyGoal) return 0;
+  const pctSobreMeta = (ventasDelDia - dailyGoal) / dailyGoal;
+  if (pctSobreMeta >= 0.2) return 10;
+  if (pctSobreMeta >= 0.1) return 8;
+  return 5;
 }
+
+// Punto 15 del backlog: 1 punto = $1.000 (decidido con el usuario 11 ago
+// 2026 — valor conservador, más fácil subirlo después que bajarlo).
+export const PUNTO_VALOR_PESOS = 1000;
 
 export const PUNTUALIDAD_META_SEMANAL = 35;
 

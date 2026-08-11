@@ -176,6 +176,10 @@ Pega este archivo completo como primer mensaje. El asistente debe:
 - **Paso 16** — Reportes semanales guardados en Storage agrupados por año
   (ver punto 13 de "Qué falta"). Patch 0021 (policies de storage.objects
   para el folder `weekly-reports/`).
+- **Paso 17** — Bonificación de ventas en puntos + valor en pesos (ver punto
+  15 de "Qué falta"). `computeAutoVentasPuntos` en `bonos.ts`, $1.000/punto,
+  "Bono estimado" visible en Agenda/Panel/reporte personal. No requirió
+  cambio de schema.
 
 ## Migraciones SQL — MUY IMPORTANTE
 
@@ -294,14 +298,11 @@ antes de asumir**, no inventar reglas.
    cada uno de los 8 barriles reales, mismo patrón que "Botellas de
    repuesto" de insumos_coctel/shots. Dato insertado directo en la base
    real (no necesitó patch, solo `seed.sql` actualizado).
-5. **Descartado por el usuario** — mostrar litros aproximados de un barril.
-   Se dejó como qty simple (punto 4) en vez de esto. ⚠️ **Contradicción sin
-   resolver**: el 11 ago 2026 el usuario volvió a pedirlo ("si el barril es
-   de tantos litros poner aprox cuanto queda"), en el mismo mensaje que
-   repitió gran parte del backlog viejo. No se implementó — puede ser que
-   simplemente reenvió la lista completa sin revisar qué ya estaba
-   descartado. **Preguntar antes de tocar esto**: ¿de verdad quiere litros
-   aproximados ahora, o el punto 4 (qty simple, ya hecho) es suficiente?
+5. **Descartado por el usuario** (dos veces — confirmado de nuevo 11 ago
+   2026) — mostrar litros aproximados de un barril. Se queda como qty simple
+   (punto 4). El usuario lo había vuelto a pedir el mismo día en un mensaje
+   que repitió gran parte del backlog viejo, pero al preguntarle confirmó
+   "omite el 5".
 6. Panel ya tenía `SummaryCard` con Bajo mínimo / En buen nivel /
    Aprovisionado (%) desde antes — no se tocó, no se pidió más detalle.
 7. ✅ **Panel por productos de barra y cocina** — hecho. Nueva sección
@@ -362,13 +363,21 @@ antes de asumir**, no inventar reglas.
     (`mi-dia/personal-report.ts`) cada día muestra los puntos ganados +
     acumulado del periodo de 14 días. Ninguno de estos totales se persiste —
     se recalculan en vivo igual que antes, mismo patrón que ventas/puntualidad
-    ya tenían. **No toca dinero/bonificación** (eso sigue siendo el punto 15,
-    que sigue sin la tabla de conversión puntos↔pesos).
-15. **Bonificación diaria basada en % de venta adicional → puntos → plata**:
-    "sacar el porcentaje de lo que se ganó adicional para dar los puntos,
-    puntos equivalente a plata". Revisar `computeAutoVentas` en
-    `src/lib/bonos.ts` y cómo se paga hoy la bonificación (`bonuses` table)
-    — falta la tabla de conversión exacta puntos↔pesos.
+    ya tenían.
+15. ✅ **Bonificación diaria basada en % de venta adicional → puntos → plata**
+    — hecho. `computeAutoVentasPuntos` en `src/lib/bonos.ts` reemplazó el
+    booleano `computeAutoVentas` (mismo dato de equipo completo — ventas del
+    día vs. meta diaria, no venta atribuida por mesero): no llega a meta =
+    0 pts, cumple hasta +10% sobre meta = 5 pts, +10-20% = 8 pts, +20% o más
+    = 10 pts. **Valor del punto: $1.000** (`PUNTO_VALOR_PESOS`, decidido con
+    el usuario 11 ago 2026 — número conservador, elegido a propósito porque
+    es más fácil subirlo después que bajarlo; la parte de puntualidad es el
+    único costo "fijo" real, máx. $35.000/persona/semana, ya que la parte de
+    ventas solo se paga cuando ya entró venta de más). "Bono estimado"
+    (puntualidad + ventas, en pesos) se muestra junto a cada persona en
+    Calificación del equipo (Agenda), en el PDF semanal de Panel, y en el
+    reporte personal. Es un estimado de referencia — no está conectado a
+    ningún proceso real de pago/nómina.
 16. **"No encontré en dónde calificar a los meseros"** — SÍ existe:
     Agenda → sección "Calificación del equipo" (`CalificacionesSection.tsx`),
     casi al final de la página. Pero solo muestra gente que ya tiene un
@@ -376,17 +385,25 @@ antes de asumir**, no inventar reglas.
     aparece "Agrega turnos primero..." y es fácil pensar que no existe.
     Posible mejora de UX: hacerla más visible o no depender de que el turno
     ya esté cargado.
-17. **"Control de bajas en cocina" para cocinera** — `cocinero` ya tiene
-    acceso a "Pérdidas" en el nav (`lib/nav.ts`) para reportar bajas/mermas.
-    Confirmar con el usuario si esto ya cubre el pedido o si "control de
-    bajas" es un concepto distinto (ej. un registro específico de
-    desperdicio de cocina separado de Pérdidas general).
+17. **"Control de bajas en cocina" para cocinera** — el usuario confirmó
+    11 ago 2026 que "Pérdidas" (que ya tiene cocinero) y "bajas de comida"
+    son conceptos distintos, pero no sabe si deberían unificarse — pidió
+    consejo. **Revisado el código de Pérdidas** (`perdidas/PerdidasClient.tsx`):
+    ya filtra por dominio (cocinero solo ve items de cocina) y ya tiene
+    categoría "Producto" + motivo libre — técnicamente ya cubriría bajas de
+    cocina sin construir nada nuevo. **Recomendación dada, sin confirmar
+    todavía**: no crear sistema aparte (duplicaría items/RLS/reportes sin
+    ganar nada, y fragmentaría el reporte semanal); si acaso, agregar un
+    motivo predefinido tipo "se quemó / se cayó / venció" para que la
+    cocinera no escriba texto libre cada vez. Falta que el usuario diga si
+    quiere ese detalle o lo deja tal cual.
 
 ### Notas para retomar
 
-- Quedan pendientes de una decisión de negocio antes de implementar: 5
-  (contradicción sin resolver, ver arriba), 13, 15, 17. No asumir números,
-  nombres de items, ni reglas de cálculo en esos.
+- Solo queda pendiente el punto 17 (esperando que el usuario confirme si
+  quiere el motivo predefinido para bajas de cocina, o lo deja tal cual con
+  "Pérdidas"). Todo lo demás del backlog original ya quedó resuelto u
+  omitido a pedido del usuario (punto 5).
 - Los puntos 6, 9, 16 se pueden resolver revisando/mejorando lo que ya
   existe, sin necesitar tanta info nueva del usuario.
 - Dado el volumen, conviene ir en tandas chicas y confirmar con el usuario

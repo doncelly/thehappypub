@@ -2,7 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fmtCOP, fmtDateLabel, fmtHM, lastNDays, bogotaDayRangeUTC, bogotaDateOf } from "@/lib/format";
-import { computeAutoPuntualidadPuntos, PUNTUALIDAD_META_SEMANAL } from "@/lib/bonos";
+import { computeAutoPuntualidadPuntos, computeAutoVentasPuntos, PUNTUALIDAD_META_SEMANAL, PUNTO_VALOR_PESOS } from "@/lib/bonos";
 import { createReportDoc, HAPPY_GOLD, GRAY } from "@/lib/pdf";
 import { buildCajaCsvRows, rowsToCsvString } from "@/lib/caja-csv";
 
@@ -82,11 +82,12 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
   line("Resumen por empleado (semana)", 13, HAPPY_GOLD, true);
   space(1);
 
-  type EmpStat = { name: string; dias: number; puntualidadPts: number; servicioOk: number; tareasOk: number; tareasTot: number; ventas: number };
+  type EmpStat = { name: string; dias: number; puntualidadPts: number; ventasPts: number; servicioOk: number; tareasOk: number; tareasTot: number; ventas: number };
   const empStats: Record<string, EmpStat> = {};
-  for (const u of users ?? []) empStats[u.id] = { name: u.name, dias: 0, puntualidadPts: 0, servicioOk: 0, tareasOk: 0, tareasTot: 0, ventas: 0 };
+  for (const u of users ?? []) empStats[u.id] = { name: u.name, dias: 0, puntualidadPts: 0, ventasPts: 0, servicioOk: 0, tareasOk: 0, tareasTot: 0, ventas: 0 };
 
   for (const d of days) {
+    const ventasPtsDelDia = computeAutoVentasPuntos(goalByDate[d] ?? null, ventasByDate[d] ?? 0);
     for (const t of (shifts ?? []).filter((s) => s.date === d)) {
       const u = (users ?? []).find((x) => x.name.trim().toLowerCase() === t.person_name.trim().toLowerCase());
       if (!u || !empStats[u.id]) continue;
@@ -95,6 +96,7 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
       const checkIn = attendanceByDateUser[d]?.[u.id]?.check_in ?? null;
       const pts = computeAutoPuntualidadPuntos(t.schedule_label, checkIn);
       if (pts !== null) stat.puntualidadPts += pts;
+      if (ventasPtsDelDia !== null) stat.ventasPts += ventasPtsDelDia;
       const manual = bonusByDateUser[d]?.[u.id];
       if (manual) {
         if (manual.service === true) stat.servicioOk++;
@@ -112,8 +114,9 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
 
   for (const stat of Object.values(empStats).filter((e) => e.dias > 0)) {
     const cumpleMeta = stat.puntualidadPts >= PUNTUALIDAD_META_SEMANAL;
+    const bonoEstimado = (stat.puntualidadPts + stat.ventasPts) * PUNTO_VALOR_PESOS;
     line(
-      `${stat.name}: ${stat.dias} días · puntualidad ${stat.puntualidadPts}/${PUNTUALIDAD_META_SEMANAL} pts${cumpleMeta ? " ✓" : ""} · servicio OK ${stat.servicioOk} · tareas OK ${stat.tareasOk}/${stat.tareasTot} · ventas atribuidas ${fmtCOP(stat.ventas)}`,
+      `${stat.name}: ${stat.dias} días · puntualidad ${stat.puntualidadPts}/${PUNTUALIDAD_META_SEMANAL} pts${cumpleMeta ? " ✓" : ""} · ventas ${stat.ventasPts} pts · bono estimado ${fmtCOP(bonoEstimado)} · servicio OK ${stat.servicioOk} · tareas OK ${stat.tareasOk}/${stat.tareasTot} · ventas atribuidas ${fmtCOP(stat.ventas)}`,
       9,
     );
   }

@@ -41,6 +41,7 @@ type Props = {
   weekdayTemplates: WeekdayTemplate[];
   shiftScheduleTemplates: ShiftScheduleTemplate[];
   weeklyPuntualidadByUser: Record<string, number>;
+  weeklyVentasByUser: Record<string, number>;
 };
 
 const WEEKDAY_LABELS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
@@ -277,6 +278,7 @@ export function AgendaClient(props: Props) {
         ventasHoy={props.ventasHoy}
         serviceRatings={props.serviceRatings}
         weeklyPuntualidadByUser={props.weeklyPuntualidadByUser}
+        weeklyVentasByUser={props.weeklyVentasByUser}
         onChanged={() => router.refresh()}
       />
 

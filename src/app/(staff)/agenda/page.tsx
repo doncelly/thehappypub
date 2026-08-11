@@ -1,8 +1,8 @@
 import { requireRole } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { todayISO, mondayOf, weekDates, bogotaDayRangeUTC } from "@/lib/format";
+import { todayISO, mondayOf, weekDates, bogotaDayRangeUTC, bogotaDateOf } from "@/lib/format";
 import { logSupabaseError } from "@/lib/log-supabase-error";
-import { computeAutoPuntualidadPuntos } from "@/lib/bonos";
+import { computeAutoPuntualidadPuntos, computeAutoVentasPuntos } from "@/lib/bonos";
 import { AgendaClient } from "./AgendaClient";
 
 function isValidISODate(s: string | undefined): s is string {
@@ -50,6 +50,8 @@ export default async function AgendaPage({
     { data: shiftScheduleTemplates, error: shiftScheduleTemplatesError },
     { data: weekShifts, error: weekShiftsError },
     { data: weekAttendance, error: weekAttendanceError },
+    { data: weekAgendaDays, error: weekAgendaDaysError },
+    { data: weekOrders, error: weekOrdersError },
   ] = await Promise.all([
     supabase.from("agenda_days").select("*").eq("date", date).maybeSingle(),
     supabase.from("weekly_goals").select("*").eq("week_monday", monday).maybeSingle(),
@@ -66,6 +68,8 @@ export default async function AgendaPage({
     supabase.from("shift_schedule_templates").select("*").order("sort_order"),
     supabase.from("shifts").select("date, person_name, user_id, schedule_label").in("date", weekDays),
     supabase.from("attendance").select("date, user_id, check_in").in("date", weekDays),
+    supabase.from("agenda_days").select("date, daily_goal").in("date", weekDays),
+    supabase.from("orders").select("total, created_at").gte("created_at", bogotaDayRangeUTC(monday).start).lte("created_at", bogotaDayRangeUTC(weekDays[6]).end),
   ]);
 
   for (const [label, error] of Object.entries({
@@ -84,6 +88,8 @@ export default async function AgendaPage({
     shiftScheduleTemplatesError,
     weekShiftsError,
     weekAttendanceError,
+    weekAgendaDaysError,
+    weekOrdersError,
   })) {
     logSupabaseError(`AgendaPage ${label}`, error);
   }
@@ -99,6 +105,26 @@ export default async function AgendaPage({
       const checkIn = dayAttendance.find((a) => a.user_id === uid)?.check_in ?? null;
       const pts = computeAutoPuntualidadPuntos(t.schedule_label, checkIn);
       if (pts !== null) weeklyPuntualidadByUser[uid] = (weeklyPuntualidadByUser[uid] ?? 0) + pts;
+    }
+  }
+
+  // Puntos semanales de ventas (punto 15 del backlog): mismo dato de equipo
+  // completo que ya usaba el check ✓/✗ de "Ventas" (no es venta atribuida
+  // por mesero) — a quien tuvo turno ese día se le suman los puntos del día.
+  const goalByWeekDate = Object.fromEntries((weekAgendaDays ?? []).map((a) => [a.date, a.daily_goal]));
+  const ventasByWeekDate: Record<string, number> = {};
+  for (const o of weekOrders ?? []) {
+    const d = bogotaDateOf(o.created_at);
+    ventasByWeekDate[d] = (ventasByWeekDate[d] ?? 0) + o.total;
+  }
+  const weeklyVentasByUser: Record<string, number> = {};
+  for (const d of weekDays) {
+    const pts = computeAutoVentasPuntos(goalByWeekDate[d] ?? null, ventasByWeekDate[d] ?? 0);
+    if (pts === null) continue;
+    for (const t of (weekShifts ?? []).filter((s) => s.date === d)) {
+      const uid = t.user_id ?? (users ?? []).find((u) => u.name.trim().toLowerCase() === t.person_name.trim().toLowerCase())?.id;
+      if (!uid) continue;
+      weeklyVentasByUser[uid] = (weeklyVentasByUser[uid] ?? 0) + pts;
     }
   }
 
@@ -121,6 +147,7 @@ export default async function AgendaPage({
       weekdayTemplates={weekdayTemplates ?? []}
       shiftScheduleTemplates={shiftScheduleTemplates ?? []}
       weeklyPuntualidadByUser={weeklyPuntualidadByUser}
+      weeklyVentasByUser={weeklyVentasByUser}
     />
   );
 }

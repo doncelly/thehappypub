@@ -1,7 +1,8 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { computeAutoVentas, computeAutoPuntualidadPuntos, PUNTUALIDAD_META_SEMANAL } from "@/lib/bonos";
+import { fmtCOP } from "@/lib/format";
+import { computeAutoPuntualidadPuntos, computeAutoVentasPuntos, PUNTUALIDAD_META_SEMANAL, PUNTO_VALOR_PESOS } from "@/lib/bonos";
 import { Section, EmptyState } from "@/components/panel-ui";
 import type { Shift, Bonus, UserRow, Attendance, ServiceRating } from "./types";
 
@@ -15,6 +16,7 @@ type Props = {
   ventasHoy: number;
   serviceRatings: ServiceRating[];
   weeklyPuntualidadByUser: Record<string, number>;
+  weeklyVentasByUser: Record<string, number>;
   onChanged: () => void;
 };
 
@@ -24,18 +26,30 @@ function emojiFor(v: boolean | null): string {
   return v === true ? "😊" : v === false ? "😞" : "⏳";
 }
 
-function puntualidadEmoji(pts: number | null): string {
+function puntosEmoji(pts: number | null): string {
   return pts === null ? "⏳" : pts >= 5 ? "😊" : pts > 0 ? "😐" : "😞";
 }
 
 function computeAuto(dailyGoal: number | null, ventasHoy: number, shift: Shift | undefined, checkIn: string | null) {
   return {
-    ventas: computeAutoVentas(dailyGoal, ventasHoy),
+    ventasPts: computeAutoVentasPuntos(dailyGoal, ventasHoy),
     puntualidadPts: computeAutoPuntualidadPuntos(shift?.schedule_label, checkIn),
   };
 }
 
-export function CalificacionesSection({ date, shifts, bonuses, users, attendance, dailyGoal, ventasHoy, serviceRatings, weeklyPuntualidadByUser, onChanged }: Props) {
+export function CalificacionesSection({
+  date,
+  shifts,
+  bonuses,
+  users,
+  attendance,
+  dailyGoal,
+  ventasHoy,
+  serviceRatings,
+  weeklyPuntualidadByUser,
+  weeklyVentasByUser,
+  onChanged,
+}: Props) {
   const supabase = createClient();
 
   const uniqueNames = [...new Set(shifts.map((t) => t.person_name.trim().toLowerCase()))];
@@ -72,9 +86,10 @@ export function CalificacionesSection({ date, shifts, bonuses, users, attendance
           const manual = bonusByUser[u.id];
           const auto = computeAuto(dailyGoal, ventasHoy, shiftByUser[u.id], attendanceByUser[u.id]?.check_in ?? null);
           const ratings = serviceRatings.filter((r) => r.user_id === u.id);
-          const weeklyPts = weeklyPuntualidadByUser[u.id] ?? 0;
+          const weeklyPuntualidadPts = weeklyPuntualidadByUser[u.id] ?? 0;
+          const weeklyVentasPts = weeklyVentasByUser[u.id] ?? 0;
+          const bonoEstimado = (weeklyPuntualidadPts + weeklyVentasPts) * PUNTO_VALOR_PESOS;
           const cats: { key: string; label: string; val: boolean | null; auto: boolean }[] = [
-            { key: "ventas", label: "Ventas", val: auto.ventas, auto: true },
             { key: "service", label: "Servicio", val: manual?.service ?? null, auto: false },
             { key: "task_alistamiento", label: "Alistamiento", val: manual?.task_alistamiento ?? null, auto: false },
             { key: "task_inventario", label: "Inventario", val: manual?.task_inventario ?? null, auto: false },
@@ -93,15 +108,25 @@ export function CalificacionesSection({ date, shifts, bonuses, users, attendance
               )}
               <div className="mb-2.5 text-[11px] text-text-faint">
                 Puntualidad esta semana:{" "}
-                <span className={weeklyPts >= PUNTUALIDAD_META_SEMANAL ? "font-bold text-gold" : "font-bold"}>
-                  {weeklyPts}/{PUNTUALIDAD_META_SEMANAL} pts
+                <span className={weeklyPuntualidadPts >= PUNTUALIDAD_META_SEMANAL ? "font-bold text-gold" : "font-bold"}>
+                  {weeklyPuntualidadPts}/{PUNTUALIDAD_META_SEMANAL} pts
                 </span>
+                {" · "}Ventas: <span className="font-bold">{weeklyVentasPts} pts</span>
+              </div>
+              <div className="mb-2.5 text-[11px] text-text-faint">
+                Bono estimado esta semana: <span className="font-bold text-gold">{fmtCOP(bonoEstimado)}</span>
               </div>
               <div className="grid grid-cols-3 gap-1.5">
                 <div className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface-2 px-1 py-1.5">
-                  <div className="text-lg">{puntualidadEmoji(auto.puntualidadPts)}</div>
+                  <div className="text-lg">{puntosEmoji(auto.puntualidadPts)}</div>
                   <div className="text-center text-[8.5px] leading-tight text-text-faint">
                     Puntualidad {auto.puntualidadPts !== null ? `(${auto.puntualidadPts} pts)` : ""}
+                  </div>
+                </div>
+                <div className="flex flex-col items-center gap-1 rounded-lg border border-border bg-surface-2 px-1 py-1.5">
+                  <div className="text-lg">{puntosEmoji(auto.ventasPts)}</div>
+                  <div className="text-center text-[8.5px] leading-tight text-text-faint">
+                    Ventas {auto.ventasPts !== null ? `(${auto.ventasPts} pts)` : ""}
                   </div>
                 </div>
                 {cats.map((c) => (
