@@ -1,7 +1,7 @@
 "use client";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fmtDateLabel, weekDates } from "@/lib/format";
+import { fmtDateLabel, weekDates, todayISO, bogotaDayRangeUTC, bogotaDateOf, fmtCOP } from "@/lib/format";
 import { createReportDoc, HAPPY_GOLD, GRAY, BRAND_TEXT } from "@/lib/pdf";
 
 const BUCKET = "happy-pub-photos";
@@ -14,13 +14,22 @@ const BUCKET = "happy-pub-photos";
 export async function generateAndSaveSchedulePdf(supabase: SupabaseClient<any>, monday: string): Promise<{ error: string | null }> {
   const days = weekDates(monday);
   const sunday = days[6];
+  const today = todayISO();
+  const weekRange = bogotaDayRangeUTC(monday);
+  const weekEnd = bogotaDayRangeUTC(sunday);
 
-  const [{ data: agendaDays }, { data: shifts }] = await Promise.all([
+  const [{ data: agendaDays }, { data: shifts }, { data: orders }] = await Promise.all([
     supabase.from("agenda_days").select("*").in("date", days),
     supabase.from("shifts").select("*").in("date", days).order("created_at"),
+    supabase.from("orders").select("total, created_at").gte("created_at", weekRange.start).lte("created_at", weekEnd.end),
   ]);
 
   const agendaByDate = Object.fromEntries((agendaDays ?? []).map((a) => [a.date, a]));
+  const ventasByDate: Record<string, number> = {};
+  for (const o of orders ?? []) {
+    const d = bogotaDateOf(o.created_at);
+    ventasByDate[d] = (ventasByDate[d] ?? 0) + o.total;
+  }
 
   const { doc, line, space } = await createReportDoc("Horario de la semana");
   line(`${fmtDateLabel(monday)}  al  ${fmtDateLabel(sunday)}`, 10, GRAY);
@@ -37,6 +46,19 @@ export async function generateAndSaveSchedulePdf(supabase: SupabaseClient<any>, 
     line(opParts.length ? opParts.join("  ·  ") : "Sin datos de operación cargados para este día.", 9);
     if (a?.promo && a.promo !== "NA") line(`Promo: ${a.promo}`, 8.5, GRAY);
     if (a?.event && a.event !== "NA") line(`Evento: ${a.event}`, 8.5, GRAY);
+
+    // Resumen de ventas — solo para días que ya pasaron (o es hoy); un día
+    // futuro todavía no tiene nada que resumir.
+    if (d <= today) {
+      const ventas = ventasByDate[d] ?? 0;
+      if (a?.daily_goal) {
+        const pct = Math.round((ventas / Number(a.daily_goal)) * 100);
+        const cumplido = ventas >= Number(a.daily_goal);
+        line(`Ventas: ${fmtCOP(ventas)}  ·  Cumplimiento: ${pct}%  ${cumplido ? "✓ Meta cumplida" : ""}`, 9, cumplido ? undefined : GRAY, true);
+      } else {
+        line(`Ventas: ${fmtCOP(ventas)} (sin meta definida ese día)`, 9);
+      }
+    }
 
     const dayShifts = (shifts ?? []).filter((s) => s.date === d);
     for (const tipo of ["cocina", "mesa"] as const) {

@@ -250,8 +250,8 @@ export function AgendaClient(props: Props) {
       <Section title="Horario de la semana (PDF)">
         <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
           <p className="text-[11px] leading-relaxed text-text-faint">
-            Genera un PDF con los turnos ya asignados esta semana (lun-dom) y lo guarda para que meseros y cocinera lo descarguen
-            desde Mi día.
+            Genera un PDF con los turnos ya asignados esta semana (lun-dom), más ventas y cumplimiento de meta día por día (hasta
+            hoy), y lo guarda para que meseros y cocinera lo descarguen desde Mi día.
           </p>
           <button
             onClick={onGenerateSchedulePdf}
