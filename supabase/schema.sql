@@ -53,18 +53,48 @@ create table public.pair_watches (
 comment on table public.pair_watches is 'PAIRS del HTML original ("Pares a vigilar" en el Panel), p.ej. pan vs. carne.';
 
 create table public.default_weekday_tasks (
-  weekday     integer not null check (weekday between 0 and 6), -- 0=domingo … 6=sábado
-  shift_type  text not null check (shift_type in ('mesa','cocina')),
-  task        text not null,
+  weekday       integer not null check (weekday between 0 and 6), -- 0=domingo … 6=sábado
+  shift_type    text not null check (shift_type in ('mesa','cocina')),
+  task          text not null,
+  transport_aid boolean not null default false,
   primary key (weekday, shift_type)
 );
-comment on table public.default_weekday_tasks is 'DEFAULT_CLEANING_MESAS / DEFAULT_CLEANING_COCINA — tarea de aseo sugerida al crear un turno.';
+comment on table public.default_weekday_tasks is 'DEFAULT_CLEANING_MESAS / DEFAULT_CLEANING_COCINA — tarea de aseo (y si aplica auxilio de transporte) sugeridos al crear un turno.';
 
 create table public.default_weekday_promos (
   weekday     integer primary key check (weekday between 0 and 6),
   promo       text not null
 );
-comment on table public.default_weekday_promos is 'DEFAULT_PROMOS del HTML original — solo referencia para prellenar Agenda, no se usa automáticamente.';
+comment on table public.default_weekday_promos is 'DEFAULT_PROMOS del HTML original — reemplazado por weekday_templates.promo (ver Plantilla en Agenda); se deja sin usar por compatibilidad.';
+
+-- Plantilla semanal de Agenda: valores por defecto de "Operación del día" por
+-- día de la semana, para no tener que llenarlos a mano cada día — el jefe la
+-- edita en Agenda → Plantilla, y "Aplicar plantilla" copia estos valores al
+-- formulario del día (sigue siendo editable antes de guardar, para los casos
+-- de excepción: evento especial, visita de distrito, etc.).
+create table public.weekday_templates (
+  weekday      integer primary key check (weekday between 0 and 6),
+  start_time   time,
+  shift_admin  text,
+  daily_goal   numeric,
+  promo        text,
+  event        text
+);
+comment on table public.weekday_templates is 'Plantilla editable de "Operación del día" por día de semana — ver Agenda → Plantilla.';
+
+-- Horario recurrente por slot de turno (Cocina 1, Mesas 1, Mesas 2, ...) y
+-- día de semana. La persona que cubre cada slot rota semana a semana, así
+-- que NO se guarda aquí — el jefe la elige al agregar el turno del día,
+-- solo el horario y el área quedan precargados desde la plantilla.
+create table public.shift_schedule_templates (
+  id             uuid primary key default gen_random_uuid(),
+  weekday        integer not null check (weekday between 0 and 6),
+  shift_type     text not null check (shift_type in ('mesa','cocina')),
+  slot_label     text not null,
+  schedule_label text,
+  sort_order     integer not null default 0
+);
+comment on table public.shift_schedule_templates is 'Plantilla editable de horarios por slot de turno y día de semana — ver Agenda → Plantilla.';
 
 -- ============================================================================
 -- 2. USUARIOS
@@ -1055,6 +1085,8 @@ alter table public.restaurant_tables enable row level security;
 alter table public.pair_watches enable row level security;
 alter table public.default_weekday_tasks enable row level security;
 alter table public.default_weekday_promos enable row level security;
+alter table public.weekday_templates enable row level security;
+alter table public.shift_schedule_templates enable row level security;
 alter table public.users enable row level security;
 alter table public.items enable row level security;
 alter table public.item_status enable row level security;
@@ -1102,6 +1134,12 @@ create policy "catalogo: mutacion jefe" on public.default_weekday_tasks for all 
 
 create policy "catalogo: lectura autenticados" on public.default_weekday_promos for select to authenticated using (true);
 create policy "catalogo: mutacion jefe" on public.default_weekday_promos for all to authenticated using (public.is_jefe()) with check (public.is_jefe());
+
+create policy "catalogo: lectura autenticados" on public.weekday_templates for select to authenticated using (true);
+create policy "catalogo: mutacion jefe" on public.weekday_templates for all to authenticated using (public.is_jefe()) with check (public.is_jefe());
+
+create policy "catalogo: lectura autenticados" on public.shift_schedule_templates for select to authenticated using (true);
+create policy "catalogo: mutacion jefe" on public.shift_schedule_templates for all to authenticated using (public.is_jefe()) with check (public.is_jefe());
 
 -- ---- users ----
 -- pin_hash NUNCA se expone vía RLS+grants de columnas (ver sección 16). Creación,

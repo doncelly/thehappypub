@@ -52,8 +52,26 @@ export type Bonus = {
 
 export type ServiceRating = { user_id: string; rating: "bien" | "regular" | "mal" };
 
-export type DefaultTask = { weekday: number; shift_type: "mesa" | "cocina"; task: string };
+export type DefaultTask = { weekday: number; shift_type: "mesa" | "cocina"; task: string; transport_aid: boolean };
 export type MenuCategory = { id: string; label: string; sort_order: number };
+
+export type WeekdayTemplate = {
+  weekday: number;
+  start_time: string | null;
+  shift_admin: string | null;
+  daily_goal: number | null;
+  promo: string | null;
+  event: string | null;
+};
+
+export type ShiftScheduleTemplate = {
+  id: string;
+  weekday: number;
+  shift_type: "mesa" | "cocina";
+  slot_label: string;
+  schedule_label: string | null;
+  sort_order: number;
+};
 export type UserRow = {
   id: string;
   name: string;

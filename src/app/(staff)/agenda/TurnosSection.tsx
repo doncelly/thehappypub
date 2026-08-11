@@ -3,30 +3,45 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Section, EmptyState, FieldLabel, inputCls, MiniButton } from "@/components/panel-ui";
-import type { Shift, DefaultTask, UserRow } from "./types";
+import type { Shift, DefaultTask, ShiftScheduleTemplate, UserRow } from "./types";
 
 type Props = {
   date: string;
   shifts: Shift[];
   defaultTasks: DefaultTask[];
+  shiftScheduleTemplates: ShiftScheduleTemplate[];
   users: UserRow[];
   onChanged: () => void;
 };
 
-export function TurnosSection({ date, shifts, defaultTasks, users, onChanged }: Props) {
+export function TurnosSection({ date, shifts, defaultTasks, shiftScheduleTemplates, users, onChanged }: Props) {
   const supabase = createClient();
   const weekday = new Date(date + "T12:00:00").getDay();
+  const todaySlots = shiftScheduleTemplates.filter((s) => s.weekday === weekday);
 
   const [person, setPerson] = useState("");
   const [area, setArea] = useState("");
   const [horario, setHorario] = useState("");
   const [tipo, setTipo] = useState<"mesa" | "cocina">("mesa");
   const [tarea, setTarea] = useState(() => defaultTasks.find((t) => t.weekday === weekday && t.shift_type === "mesa")?.task ?? "");
+  const [slotId, setSlotId] = useState("");
   const [saving, setSaving] = useState(false);
 
   function onTipoChange(next: "mesa" | "cocina") {
     setTipo(next);
     setTarea(defaultTasks.find((t) => t.weekday === weekday && t.shift_type === next)?.task ?? "");
+    setSlotId("");
+  }
+
+  function onSlotChange(id: string) {
+    setSlotId(id);
+    if (!id) return;
+    const slot = todaySlots.find((s) => s.id === id);
+    if (!slot) return;
+    setTipo(slot.shift_type);
+    setArea(slot.slot_label);
+    setHorario(slot.schedule_label ?? "");
+    setTarea(defaultTasks.find((t) => t.weekday === weekday && t.shift_type === slot.shift_type)?.task ?? "");
   }
 
   async function addTurno() {
@@ -46,6 +61,7 @@ export function TurnosSection({ date, shifts, defaultTasks, users, onChanged }: 
       setPerson("");
       setArea("");
       setHorario("");
+      setSlotId("");
       onChanged();
     } finally {
       setSaving(false);
@@ -97,6 +113,19 @@ export function TurnosSection({ date, shifts, defaultTasks, users, onChanged }: 
       )}
 
       <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
+        {todaySlots.length > 0 && (
+          <div>
+            <FieldLabel>Slot de plantilla (opcional — llena horario/área/tarea solos)</FieldLabel>
+            <select value={slotId} onChange={(e) => onSlotChange(e.target.value)} className={inputCls}>
+              <option value="">— Elegir slot —</option>
+              {todaySlots.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.slot_label} {s.schedule_label ? `(${s.schedule_label})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2.5">
           <div>
             <FieldLabel>Persona</FieldLabel>

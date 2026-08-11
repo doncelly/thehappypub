@@ -44,6 +44,8 @@ export default async function AgendaPage({
     { data: ordersToday, error: ordersTodayError },
     { data: ordersYesterday, error: ordersYesterdayError },
     { data: serviceRatings, error: serviceRatingsError },
+    { data: weekdayTemplates, error: weekdayTemplatesError },
+    { data: shiftScheduleTemplates, error: shiftScheduleTemplatesError },
   ] = await Promise.all([
     supabase.from("agenda_days").select("*").eq("date", date).maybeSingle(),
     supabase.from("weekly_goals").select("*").eq("week_monday", monday).maybeSingle(),
@@ -56,6 +58,8 @@ export default async function AgendaPage({
     supabase.from("orders").select("total").gte("created_at", dateRange.start).lte("created_at", dateRange.end),
     supabase.from("orders").select("total").gte("created_at", yesterdayRange.start).lte("created_at", yesterdayRange.end),
     supabase.from("service_ratings").select("user_id, rating").gte("created_at", dateRange.start).lte("created_at", dateRange.end),
+    supabase.from("weekday_templates").select("*"),
+    supabase.from("shift_schedule_templates").select("*").order("sort_order"),
   ]);
 
   for (const [label, error] of Object.entries({
@@ -70,6 +74,8 @@ export default async function AgendaPage({
     ordersTodayError,
     ordersYesterdayError,
     serviceRatingsError,
+    weekdayTemplatesError,
+    shiftScheduleTemplatesError,
   })) {
     logSupabaseError(`AgendaPage ${label}`, error);
   }
@@ -89,6 +95,8 @@ export default async function AgendaPage({
       ventasHoy={(ordersToday ?? []).reduce((s, o) => s + o.total, 0)}
       ventasAyer={(ordersYesterday ?? []).reduce((s, o) => s + o.total, 0)}
       serviceRatings={serviceRatings ?? []}
+      weekdayTemplates={weekdayTemplates ?? []}
+      shiftScheduleTemplates={shiftScheduleTemplates ?? []}
     />
   );
 }

@@ -446,21 +446,23 @@ insert into public.utility_bills (service_id, label, due_day) values
 -- TAREA DE ASEO SUGERIDA POR DÍA DE SEMANA (DEFAULT_CLEANING_MESAS/COCINA)
 -- 0=domingo … 6=sábado
 -- ============================================================================
-insert into public.default_weekday_tasks (weekday, shift_type, task) values
-  (0, 'mesa',   'Chiller'),
-  (1, 'mesa',   'Ventanas y 1 jarra de agua x matera'),
-  (2, 'mesa',   'Barra y toldo'),
-  (3, 'mesa',   'Pisos y 1 jarra de agua x matera'),
-  (4, 'mesa',   'Limpieza de polvo'),
-  (5, 'mesa',   'Baño y canecas de basura, 1 jarra de agua x matera'),
-  (6, 'mesa',   'Neveras y muebles'),
-  (0, 'cocina', 'Ollas y canecas de basura'),
-  (1, 'cocina', 'Ventanas'),
-  (2, 'cocina', 'Paredes y pisos'),
-  (3, 'cocina', 'Ollas y canecas de basura'),
-  (4, 'cocina', 'Neveras'),
-  (5, 'cocina', 'Campana'),
-  (6, 'cocina', 'Mesones y muebles');
+-- transport_aid: SI/NO/NA de "Auxilio de transporte > 11pm" en la plantilla real
+-- (Horarios.csv) — verdadero salvo lunes (cierra temprano) y domingo (no aplica).
+insert into public.default_weekday_tasks (weekday, shift_type, task, transport_aid) values
+  (0, 'mesa',   'Chiller', false),
+  (1, 'mesa',   'Ventanas y 1 jarra de agua x matera', false),
+  (2, 'mesa',   'Barra y toldo', true),
+  (3, 'mesa',   'Pisos y 1 jarra de agua x matera', true),
+  (4, 'mesa',   'Limpieza de polvo', true),
+  (5, 'mesa',   'Baño y canecas de basura, 1 jarra de agua x matera', true),
+  (6, 'mesa',   'Neveras y muebles', true),
+  (0, 'cocina', 'Ollas y canecas de basura', false),
+  (1, 'cocina', 'Ventanas', false),
+  (2, 'cocina', 'Paredes y pisos', true),
+  (3, 'cocina', 'Ollas y canecas de basura', true),
+  (4, 'cocina', 'Neveras', true),
+  (5, 'cocina', 'Campana', true),
+  (6, 'cocina', 'Mesones y muebles', true);
 
 -- ============================================================================
 -- PROMO SUGERIDA POR DÍA DE SEMANA (DEFAULT_PROMOS) — solo referencia
@@ -473,6 +475,42 @@ insert into public.default_weekday_promos (weekday, promo) values
   (4, 'Cócteles 2x1 antes de 7pm'),
   (5, 'Cerveza artesanal de barril con 15% descuento antes de 9pm'),
   (6, 'Hamburguesa + cerveza artesanal (gratis) antes de 7pm');
+
+-- ============================================================================
+-- PLANTILLA SEMANAL DE AGENDA (weekday_templates / shift_schedule_templates)
+-- Datos reales de Horarios.csv (semana 32-33, agosto 2026). Editable en
+-- Agenda → Plantilla; "Aplicar plantilla" copia esto al día seleccionado.
+-- ============================================================================
+insert into public.weekday_templates (weekday, start_time, shift_admin, daily_goal, promo, event) values
+  (1, '17:00', '1', 950000,  'Hamburguesa + cerveza artesanal (gratis) antes de 9pm', 'NA'),
+  (2, '17:00', '2', 950000,  'Alitas con descuento del 15% todo el día', 'NA'),
+  (3, '17:00', '1', 950000,  'Cerveza artesanal de barril con 15% descuento antes de 9pm', 'NA'),
+  (4, '16:00', '2', 1710000, 'Cócteles 2x1 antes de 7pm', 'NA'),
+  (5, '15:00', '1', 1330000, 'Cerveza artesanal de barril con 15% descuento antes de 9pm', 'NA'),
+  (6, '15:00', '2', 1710000, 'Hamburguesa + cerveza artesanal (gratis) antes de 7pm', 'NA'),
+  (0, '14:00', null, 950000, 'Alitas con descuento del 15% todo el día', 'NA');
+
+-- Horario por slot: cuántos meseros hay cada día viene directo de la
+-- plantilla real — jueves, viernes y sábado tienen Mesas 1 y Mesas 2; el
+-- resto de la semana solo un mesero cubre el turno.
+insert into public.shift_schedule_templates (weekday, shift_type, slot_label, schedule_label, sort_order) values
+  (1, 'cocina', 'Cocina 1', '15:30 A CIERRE', 1),
+  (1, 'mesa',   'Mesas 1',  '15:30 A CIERRE', 1),
+  (2, 'cocina', 'Cocina 1', '16:00 A CIERRE', 1),
+  (2, 'mesa',   'Mesas 2',  '16:00 A CIERRE', 2),
+  (3, 'cocina', 'Cocina 1', '16:00 A CIERRE', 1),
+  (3, 'mesa',   'Mesas 1',  '16:00 A CIERRE', 1),
+  (4, 'cocina', 'Cocina 1', '15:00 A CIERRE', 1),
+  (4, 'mesa',   'Mesas 1',  '15:00 A CIERRE', 1),
+  (4, 'mesa',   'Mesas 2',  '19:00 A CIERRE', 2),
+  (5, 'cocina', 'Cocina 1', '14:00 A CIERRE', 1),
+  (5, 'mesa',   'Mesas 1',  '19:00 A CIERRE', 1),
+  (5, 'mesa',   'Mesas 2',  '14:00 A CIERRE', 2),
+  (6, 'cocina', 'Cocina 1', '14:00 A CIERRE', 1),
+  (6, 'mesa',   'Mesas 1',  '14:00 A CIERRE', 1),
+  (6, 'mesa',   'Mesas 2',  '19:00 A CIERRE', 2),
+  (0, 'cocina', 'Cocina 1', '13:00 A CIERRE', 1),
+  (0, 'mesa',   'Mesas 1',  '13:00 A CIERRE', 1);
 
 -- ============================================================================
 -- Fin del seed. El primer jefe se crea desde /login (Paso 3), no acá — su PIN

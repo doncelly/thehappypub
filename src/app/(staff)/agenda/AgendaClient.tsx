@@ -15,10 +15,13 @@ import type {
   MenuCategory,
   UserRow,
   ServiceRating,
+  WeekdayTemplate,
+  ShiftScheduleTemplate,
 } from "./types";
 import { TurnosSection } from "./TurnosSection";
 import { AsistenciaSection } from "./AsistenciaSection";
 import { CalificacionesSection } from "./CalificacionesSection";
+import { PlantillaSection } from "./PlantillaSection";
 
 type Props = {
   date: string;
@@ -34,7 +37,11 @@ type Props = {
   ventasHoy: number;
   ventasAyer: number;
   serviceRatings: ServiceRating[];
+  weekdayTemplates: WeekdayTemplate[];
+  shiftScheduleTemplates: ShiftScheduleTemplate[];
 };
+
+const WEEKDAY_LABELS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 function shiftDate(iso: string, delta: number): string {
   const d = new Date(iso + "T12:00:00");
@@ -57,8 +64,22 @@ export function AgendaClient(props: Props) {
   const [evento, setEvento] = useState(props.agendaDay?.event ?? "");
   const [saving, setSaving] = useState(false);
 
+  const weekday = new Date(date + "T12:00:00").getDay();
+  const template = props.weekdayTemplates.find((t) => t.weekday === weekday) ?? null;
+
   function goTo(newDate: string) {
     router.push(`/agenda?date=${newDate}`);
+  }
+
+  // Copia la plantilla del día de semana al formulario — no guarda sola, para
+  // que un evento especial (excepción) se pueda ajustar antes de "Guardar día".
+  function applyTemplate() {
+    if (!template) return;
+    setStart(template.start_time?.slice(0, 5) ?? "");
+    setAdmon(template.shift_admin ?? "");
+    setMeta(template.daily_goal != null ? String(template.daily_goal) : "");
+    setPromo(template.promo ?? "");
+    setEvento(template.event ?? "");
   }
 
   async function saveDay() {
@@ -109,6 +130,15 @@ export function AgendaClient(props: Props) {
 
       <Section title="Operación del día">
         <div className="space-y-3 rounded-xl border border-border bg-surface p-3.5">
+          {!props.agendaDay && template && (
+            <button
+              type="button"
+              onClick={applyTemplate}
+              className="w-full rounded-lg border border-gold/40 bg-gold/10 py-2.5 text-[12.5px] font-bold text-gold"
+            >
+              📋 Es un día normal — aplicar plantilla de {WEEKDAY_LABELS[weekday]}
+            </button>
+          )}
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <div className="min-w-0 overflow-hidden">
               <FieldLabel>Inicio de operación</FieldLabel>
@@ -199,7 +229,14 @@ export function AgendaClient(props: Props) {
         </div>
       </Section>
 
-      <TurnosSection date={date} shifts={props.shifts} defaultTasks={props.defaultTasks} users={users} onChanged={() => router.refresh()} />
+      <TurnosSection
+        date={date}
+        shifts={props.shifts}
+        defaultTasks={props.defaultTasks}
+        shiftScheduleTemplates={props.shiftScheduleTemplates}
+        users={users}
+        onChanged={() => router.refresh()}
+      />
 
       <AsistenciaSection date={date} attendance={props.attendance} users={users} onChanged={() => router.refresh()} />
 
@@ -212,6 +249,13 @@ export function AgendaClient(props: Props) {
         dailyGoal={props.agendaDay?.daily_goal ?? null}
         ventasHoy={props.ventasHoy}
         serviceRatings={props.serviceRatings}
+        onChanged={() => router.refresh()}
+      />
+
+      <PlantillaSection
+        weekdayTemplates={props.weekdayTemplates}
+        shiftScheduleTemplates={props.shiftScheduleTemplates}
+        defaultTasks={props.defaultTasks}
         onChanged={() => router.refresh()}
       />
     </div>
