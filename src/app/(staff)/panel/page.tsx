@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { todayISO, mondayOf, weekDates } from "@/lib/format";
+import { todayISO, mondayOf, weekDates, bogotaDayRangeUTC } from "@/lib/format";
 import { logSupabaseError } from "@/lib/log-supabase-error";
 import { PanelClient } from "./PanelClient";
 
@@ -15,6 +15,7 @@ export default async function PanelPage() {
   const monday = mondayOf(today);
   const days = weekDates(monday);
   const sunday = days[6];
+  const weekRange = { start: bogotaDayRangeUTC(monday).start, end: bogotaDayRangeUTC(sunday).end };
 
   const [
     { data: categories, error: categoriesError },
@@ -41,8 +42,8 @@ export default async function PanelPage() {
     supabase
       .from("orders")
       .select("id, table_label, total, created_at, user_id")
-      .gte("created_at", `${monday}T00:00:00`)
-      .lte("created_at", `${sunday}T23:59:59`)
+      .gte("created_at", weekRange.start)
+      .lte("created_at", weekRange.end)
       .order("created_at", { ascending: false }),
     supabase.from("pair_watches").select("id, label, item_a, item_b, sort_order").order("sort_order"),
     supabase.from("stock_history").select("item_id, date, qty").gte("date", monday).lte("date", sunday),

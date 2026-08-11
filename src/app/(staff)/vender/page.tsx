@@ -1,6 +1,6 @@
 import { requireRole, roleOf } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { todayISO, minutesAgoISO } from "@/lib/format";
+import { todayISO, minutesAgoISO, bogotaDayRangeUTC } from "@/lib/format";
 import { logSupabaseError } from "@/lib/log-supabase-error";
 import { VenderClient } from "./VenderClient";
 
@@ -10,6 +10,7 @@ export default async function VenderPage() {
   const user = await requireRole("jefe", "mesero");
   const supabase = await createClient();
   const today = todayISO();
+  const todayRange = bogotaDayRangeUTC(today);
   const lockCutoff = minutesAgoISO(MESA_TIMEOUT_MIN);
 
   const [
@@ -29,7 +30,7 @@ export default async function VenderPage() {
     supabase.from("table_locks").select("table_label, user_id, locked_at").gte("locked_at", lockCutoff),
     supabase.from("pair_watches").select("id, label, item_a, item_b, sort_order").order("sort_order"),
     supabase.from("agenda_days").select("discount_pct, discount_category").eq("date", today).maybeSingle(),
-    supabase.from("orders").select("id, table_label, total, created_at, user_id").gte("created_at", `${today}T00:00:00`).lte("created_at", `${today}T23:59:59`).order("created_at", { ascending: false }),
+    supabase.from("orders").select("id, table_label, total, created_at, user_id").gte("created_at", todayRange.start).lte("created_at", todayRange.end).order("created_at", { ascending: false }),
     supabase.from("users").select("id, name"),
     supabase.from("menu_item_ingredients").select("menu_item_id"),
   ]);

@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { todayISO } from "@/lib/format";
+import { todayISO, bogotaDayRangeUTC } from "@/lib/format";
 import { logSupabaseError } from "@/lib/log-supabase-error";
 import { CajaClient } from "./CajaClient";
 
@@ -21,6 +21,7 @@ export default async function CajaPage({
   const date = isValidISODate(dateParam) ? dateParam : todayISO();
 
   const supabase = await createClient();
+  const dayRange = bogotaDayRangeUTC(date);
 
   const [
     { data: cashRegister, error: cashError },
@@ -33,7 +34,7 @@ export default async function CajaPage({
     supabase.from("cash_register_purchases").select("*").eq("date", date),
     supabase.from("cash_register_transport_aid").select("*").eq("date", date),
     supabase.from("users").select("id, name"),
-    supabase.from("orders").select("total").gte("created_at", `${date}T00:00:00`).lte("created_at", `${date}T23:59:59`),
+    supabase.from("orders").select("total").gte("created_at", dayRange.start).lte("created_at", dayRange.end),
   ]);
 
   for (const [label, error] of Object.entries({ cashError, cashPurchasesError, cashAidError, usersError, ordersError })) {

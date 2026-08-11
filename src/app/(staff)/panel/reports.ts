@@ -1,7 +1,7 @@
 "use client";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fmtCOP, fmtDateLabel, fmtHM, lastNDays } from "@/lib/format";
+import { fmtCOP, fmtDateLabel, fmtHM, lastNDays, bogotaDayRangeUTC, bogotaDateOf } from "@/lib/format";
 import { computeAutoPuntualidad } from "@/lib/bonos";
 import { createReportDoc, HAPPY_GOLD, GRAY } from "@/lib/pdf";
 import { buildCajaCsvRows, rowsToCsvString } from "@/lib/caja-csv";
@@ -16,14 +16,16 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
   const monday = days[0];
   const sunday = days[6];
 
+  const weekRange = { start: bogotaDayRangeUTC(monday).start, end: bogotaDayRangeUTC(sunday).end };
+
   const [{ data: agendaDays }, { data: orders }, { data: shifts }, { data: attendance }, { data: bonuses }, { data: losses }, { data: users }] =
     await Promise.all([
       supabase.from("agenda_days").select("date, daily_goal").in("date", days),
-      supabase.from("orders").select("total, user_id, created_at").gte("created_at", `${monday}T00:00:00`).lte("created_at", `${sunday}T23:59:59`),
+      supabase.from("orders").select("total, user_id, created_at").gte("created_at", weekRange.start).lte("created_at", weekRange.end),
       supabase.from("shifts").select("*").in("date", days),
       supabase.from("attendance").select("*").in("date", days),
       supabase.from("bonuses").select("*").in("date", days),
-      supabase.from("losses").select("*").gte("created_at", `${monday}T00:00:00`).lte("created_at", `${sunday}T23:59:59`),
+      supabase.from("losses").select("*").gte("created_at", weekRange.start).lte("created_at", weekRange.end),
       supabase.from("users").select("id, name"),
     ]);
 
@@ -33,7 +35,7 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
   const ventasByDate: Record<string, number> = {};
   const ventasByDateUser: Record<string, Record<string, number>> = {};
   for (const o of orders ?? []) {
-    const d = o.created_at.slice(0, 10);
+    const d = bogotaDateOf(o.created_at);
     ventasByDate[d] = (ventasByDate[d] ?? 0) + o.total;
     (ventasByDateUser[d] ??= {})[o.user_id] = (ventasByDateUser[d]?.[o.user_id] ?? 0) + o.total;
   }
@@ -129,17 +131,18 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Database=any hasta correr `npm run supabase:types`
 export async function exportCajaCsv(supabase: SupabaseClient<any>, today: string): Promise<boolean> {
   const days = lastNDays(today, 7);
+  const csvRange = { start: bogotaDayRangeUTC(days[0]).start, end: bogotaDayRangeUTC(days[6]).end };
 
   const [{ data: cashRegisters }, { data: orders }] = await Promise.all([
     supabase.from("cash_register").select("*").in("date", days),
-    supabase.from("orders").select("total, created_at").gte("created_at", `${days[0]}T00:00:00`).lte("created_at", `${days[6]}T23:59:59`),
+    supabase.from("orders").select("total, created_at").gte("created_at", csvRange.start).lte("created_at", csvRange.end),
   ]);
 
   if (!cashRegisters || cashRegisters.length === 0) return false;
 
   const ventasByDate: Record<string, number> = {};
   for (const o of orders ?? []) {
-    const d = o.created_at.slice(0, 10);
+    const d = bogotaDateOf(o.created_at);
     ventasByDate[d] = (ventasByDate[d] ?? 0) + o.total;
   }
 

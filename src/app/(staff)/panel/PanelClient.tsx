@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeStatus, isCriticalItem, type RawItemStatus, type ItemStatus } from "@/lib/inventory-status";
 import { levelOf, type StatusGaugeKey } from "@/lib/constants/status-levels";
-import { fmtCOP, fmtDateShort, fmtHM, fmtQty, fmtRelTime } from "@/lib/format";
+import { fmtCOP, fmtDateShort, fmtHM, fmtQty, fmtRelTime, bogotaDateOf } from "@/lib/format";
 import { Section, EmptyState, Row } from "@/components/panel-ui";
 import { APERTURA_ITEMS, CIERRE_ITEMS, allChecked } from "@/lib/constants/checklist-areas";
 import { generateWeeklyReportPdf, exportCajaCsv } from "./reports";
@@ -213,7 +213,7 @@ export function PanelClient(props: Props) {
     .map((a) => ({ name: usersById[a.user_id] ?? "—", since: a.check_in }));
 
   // ---- ventas hoy / semana ----
-  const ventasHoy = orders.filter((o) => o.created_at.slice(0, 10) === props.today).reduce((s, o) => s + o.total, 0);
+  const ventasHoy = orders.filter((o) => bogotaDateOf(o.created_at) === props.today).reduce((s, o) => s + o.total, 0);
   const ventasSemana = orders.reduce((s, o) => s + o.total, 0);
 
   // ---- pares a vigilar ----

@@ -1,7 +1,7 @@
 "use client";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fmtCOP, fmtDateLabel, fmtHM, lastNDays } from "@/lib/format";
+import { fmtCOP, fmtDateLabel, fmtHM, lastNDays, bogotaDayRangeUTC, bogotaDateOf } from "@/lib/format";
 import { shiftEarnings, type Rates, type WorkType } from "@/lib/earnings";
 import { computeAutoVentas, computeAutoPuntualidad } from "@/lib/bonos";
 import { createReportDoc, HAPPY_GOLD, GRAY } from "@/lib/pdf";
@@ -15,20 +15,21 @@ type CurrentUser = { id: string; name: string; role: "jefe" | "staff"; subrole: 
 export async function generatePersonalReportPdf(supabase: SupabaseClient<any>, today: string, user: CurrentUser, rates: Rates | null) {
   const days = lastNDays(today, 14);
   const fixedWorkType: WorkType | null = user.role === "staff" ? (user.subrole as WorkType) : null;
+  const range = { start: bogotaDayRangeUTC(days[0]).start, end: bogotaDayRangeUTC(days[13]).end };
 
   const [{ data: attendance }, { data: shifts }, { data: bonuses }, { data: agendaDays }, { data: orders }, { data: ratings }] = await Promise.all([
     supabase.from("attendance").select("date, work_type, check_in, check_out").eq("user_id", user.id).in("date", days).order("date"),
     supabase.from("shifts").select("date, person_name, schedule_label").in("date", days),
     supabase.from("bonuses").select("*").eq("user_id", user.id).in("date", days),
     supabase.from("agenda_days").select("date, daily_goal").in("date", days),
-    supabase.from("orders").select("total, created_at").gte("created_at", `${days[0]}T00:00:00`).lte("created_at", `${days[13]}T23:59:59`),
-    supabase.from("service_ratings").select("rating, created_at").eq("user_id", user.id).gte("created_at", `${days[0]}T00:00:00`).lte("created_at", `${days[13]}T23:59:59`),
+    supabase.from("orders").select("total, created_at").gte("created_at", range.start).lte("created_at", range.end),
+    supabase.from("service_ratings").select("rating, created_at").eq("user_id", user.id).gte("created_at", range.start).lte("created_at", range.end),
   ]);
 
   const goalByDate = Object.fromEntries((agendaDays ?? []).map((a) => [a.date, a.daily_goal]));
   const ventasByDate: Record<string, number> = {};
   for (const o of orders ?? []) {
-    const d = o.created_at.slice(0, 10);
+    const d = bogotaDateOf(o.created_at);
     ventasByDate[d] = (ventasByDate[d] ?? 0) + o.total;
   }
 

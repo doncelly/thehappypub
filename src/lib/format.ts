@@ -5,8 +5,51 @@ function isoOfDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Estas funciones corren tanto en Server Components (Vercel, reloj en UTC)
+// como en Client Components (el navegador del mesero, reloj en hora Bogotá)
+// — por eso usan getters UTC explícitos en vez de los locales de isoOfDate:
+// así el resultado no depende de en cuál de los dos entornos se ejecuten.
+// Colombia no observa horario de verano, así que el offset es fijo.
+const BOGOTA_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+function isoOfDateUTC(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function nowInBogota(): Date {
+  return new Date(Date.now() - BOGOTA_OFFSET_MS);
+}
+
+// Sin este ajuste, "hoy" cambiaba a las 7pm hora Bogotá (medianoche UTC) en
+// vez de a medianoche real, y los pedidos registrados después de esa hora
+// quedaban fechados "mañana": al recargar la página, la consulta de
+// "pedidos de hoy" ya no los incluía y parecían haber desaparecido (aunque
+// seguían intactos en la base de datos).
 export function todayISO(): string {
-  return isoOfDate(new Date());
+  return isoOfDateUTC(nowInBogota());
+}
+
+// A qué día calendario de Bogotá pertenece un timestamp UTC (orders.created_at,
+// etc.) — inverso de bogotaDayRangeUTC(). Usar esto en vez de
+// `ts.slice(0, 10)` para agrupar ventas por día: ese slice toma el día UTC,
+// que a partir de las 7pm hora Bogotá ya es "mañana".
+export function bogotaDateOf(ts: string): string {
+  return isoOfDateUTC(new Date(new Date(ts).getTime() - BOGOTA_OFFSET_MS));
+}
+
+// Rango UTC real de un día calendario de Bogotá, para filtrar columnas
+// timestamptz (como orders.created_at) con .gte()/.lte(). Un día de Bogotá
+// (medianoche a medianoche hora local) empieza a las 05:00 UTC y termina a
+// las 04:59:59 UTC del día siguiente — construir el rango con
+// `${date}T00:00:00`/`${date}T23:59:59` a secas (interpretado en UTC) corta
+// el día del negocio a las 7pm hora Bogotá.
+export function bogotaDayRangeUTC(dateISO: string): { start: string; end: string } {
+  const start = new Date(`${dateISO}T00:00:00Z`);
+  start.setUTCHours(start.getUTCHours() + 5);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  end.setUTCSeconds(end.getUTCSeconds() - 1);
+  return { start: start.toISOString(), end: end.toISOString() };
 }
 
 // Envuelto en su propia función para que el linter de pureza de React (que
@@ -48,14 +91,14 @@ export function lastNDays(todayISO: string, n: number): string[] {
 
 // quincenaRange() del original: 1-15 o 16-fin de mes, según el día de hoy.
 export function quincenaRange(): { start: string; end: string } {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  if (now.getDate() <= 15) {
-    return { start: isoOfDate(new Date(y, m, 1)), end: isoOfDate(new Date(y, m, 15)) };
+  const now = nowInBogota();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  if (now.getUTCDate() <= 15) {
+    return { start: isoOfDateUTC(new Date(Date.UTC(y, m, 1))), end: isoOfDateUTC(new Date(Date.UTC(y, m, 15))) };
   }
-  const lastDay = new Date(y, m + 1, 0).getDate();
-  return { start: isoOfDate(new Date(y, m, 16)), end: isoOfDate(new Date(y, m, lastDay)) };
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return { start: isoOfDateUTC(new Date(Date.UTC(y, m, 16))), end: isoOfDateUTC(new Date(Date.UTC(y, m, lastDay))) };
 }
 
 export function fmtQty(unit: string, qty: number): string {

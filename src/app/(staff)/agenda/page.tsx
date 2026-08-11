@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { todayISO, mondayOf } from "@/lib/format";
+import { todayISO, mondayOf, bogotaDayRangeUTC } from "@/lib/format";
 import { logSupabaseError } from "@/lib/log-supabase-error";
 import { AgendaClient } from "./AgendaClient";
 
@@ -29,6 +29,8 @@ export default async function AgendaPage({
   const yesterday = prevDay(date);
 
   const supabase = await createClient();
+  const dateRange = bogotaDayRangeUTC(date);
+  const yesterdayRange = bogotaDayRangeUTC(yesterday);
 
   const [
     { data: agendaDay, error: agendaError },
@@ -51,9 +53,9 @@ export default async function AgendaPage({
     supabase.from("default_weekday_tasks").select("*"),
     supabase.from("menu_categories").select("id, label, sort_order").order("sort_order"),
     supabase.from("users").select("id, name, active, role, subrole"),
-    supabase.from("orders").select("total").gte("created_at", `${date}T00:00:00`).lte("created_at", `${date}T23:59:59`),
-    supabase.from("orders").select("total").gte("created_at", `${yesterday}T00:00:00`).lte("created_at", `${yesterday}T23:59:59`),
-    supabase.from("service_ratings").select("user_id, rating").gte("created_at", `${date}T00:00:00`).lte("created_at", `${date}T23:59:59`),
+    supabase.from("orders").select("total").gte("created_at", dateRange.start).lte("created_at", dateRange.end),
+    supabase.from("orders").select("total").gte("created_at", yesterdayRange.start).lte("created_at", yesterdayRange.end),
+    supabase.from("service_ratings").select("user_id, rating").gte("created_at", dateRange.start).lte("created_at", dateRange.end),
   ]);
 
   for (const [label, error] of Object.entries({

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentAppUser, roleOf } from "@/lib/auth/current-user";
-import { todayISO } from "@/lib/format";
+import { todayISO, bogotaDayRangeUTC } from "@/lib/format";
 import { ensureDateTab, writeCajaTab } from "@/lib/google-sheets";
 
 // Actualiza la pestaña de la fecha en la hoja de cálculo de cierres de caja
@@ -73,6 +73,7 @@ export async function POST(req: Request) {
   const targetDate = date || todayISO();
 
   const supabase = await createClient();
+  const prevDayRange = bogotaDayRangeUTC(addDaysISO(targetDate, -1));
   const [{ data: cash, error: cashError }, { data: purchases }, { data: transportAid }, { data: prevOrders }] = await Promise.all([
     supabase.from("cash_register").select("*").eq("date", targetDate).maybeSingle(),
     supabase.from("cash_register_purchases").select("concept, amount").eq("date", targetDate),
@@ -80,8 +81,8 @@ export async function POST(req: Request) {
     supabase
       .from("orders")
       .select("total")
-      .gte("created_at", `${addDaysISO(targetDate, -1)}T00:00:00`)
-      .lte("created_at", `${addDaysISO(targetDate, -1)}T23:59:59`),
+      .gte("created_at", prevDayRange.start)
+      .lte("created_at", prevDayRange.end),
   ]);
 
   if (cashError || !cash) {

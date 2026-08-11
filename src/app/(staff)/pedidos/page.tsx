@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { todayISO } from "@/lib/format";
+import { todayISO, bogotaDayRangeUTC } from "@/lib/format";
 import { logSupabaseError } from "@/lib/log-supabase-error";
 import { PedidosClient } from "./PedidosClient";
 
@@ -8,13 +8,14 @@ export default async function PedidosPage() {
   await requireRole("jefe", "cocinero");
   const supabase = await createClient();
   const today = todayISO();
+  const todayRange = bogotaDayRangeUTC(today);
 
   const [{ data: orders, error: ordersError }, { data: users, error: usersError }] = await Promise.all([
     supabase
       .from("orders")
       .select("id, table_label, user_id, created_at, kitchen_ack_at, kitchen_ack_by")
-      .gte("created_at", `${today}T00:00:00`)
-      .lte("created_at", `${today}T23:59:59`)
+      .gte("created_at", todayRange.start)
+      .lte("created_at", todayRange.end)
       .order("created_at", { ascending: true }),
     supabase.from("users").select("id, name"),
   ]);
