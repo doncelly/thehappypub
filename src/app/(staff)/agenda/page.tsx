@@ -82,6 +82,7 @@ export default async function AgendaPage({
 
   return (
     <AgendaClient
+      key={date}
       date={date}
       currentUserName={user.name}
       agendaDay={agendaDay}

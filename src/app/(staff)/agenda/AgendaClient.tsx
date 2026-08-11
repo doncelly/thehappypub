@@ -54,32 +54,29 @@ export function AgendaClient(props: Props) {
   const router = useRouter();
   const supabase = createClient();
 
-  const [start, setStart] = useState(props.agendaDay?.start_time?.slice(0, 5) ?? "");
-  const [admon, setAdmon] = useState(props.agendaDay?.shift_admin ?? "");
-  const [meta, setMeta] = useState(props.agendaDay?.daily_goal != null ? String(props.agendaDay.daily_goal) : "");
-  const [metaSemanal, setMetaSemanal] = useState(props.weeklyGoal?.goal != null ? String(props.weeklyGoal.goal) : "");
-  const [promo, setPromo] = useState(props.agendaDay?.promo ?? "");
-  const [descPct, setDescPct] = useState(props.agendaDay?.discount_pct != null ? String(props.agendaDay.discount_pct) : "");
-  const [descCat, setDescCat] = useState(props.agendaDay?.discount_category ?? "todas");
-  const [evento, setEvento] = useState(props.agendaDay?.event ?? "");
-  const [saving, setSaving] = useState(false);
-
   const weekday = new Date(date + "T12:00:00").getDay();
   const template = props.weekdayTemplates.find((t) => t.weekday === weekday) ?? null;
+  const usingTemplate = !props.agendaDay && !!template;
+
+  // Si el día no tiene datos guardados todavía, arranca con los valores de la
+  // plantilla de ese día de semana en vez de vacío — así no hay que llenar
+  // nada a mano en un día normal, solo revisar y "Guardar día". Si el día ya
+  // tiene datos guardados (o es una excepción que ya se editó), esos mandan.
+  const [start, setStart] = useState(props.agendaDay?.start_time?.slice(0, 5) ?? template?.start_time?.slice(0, 5) ?? "");
+  const [admon, setAdmon] = useState(props.agendaDay?.shift_admin ?? template?.shift_admin ?? "");
+  const [meta, setMeta] = useState(() => {
+    const v = props.agendaDay?.daily_goal ?? template?.daily_goal;
+    return v != null ? String(v) : "";
+  });
+  const [metaSemanal, setMetaSemanal] = useState(props.weeklyGoal?.goal != null ? String(props.weeklyGoal.goal) : "");
+  const [promo, setPromo] = useState(props.agendaDay?.promo ?? template?.promo ?? "");
+  const [descPct, setDescPct] = useState(props.agendaDay?.discount_pct != null ? String(props.agendaDay.discount_pct) : "");
+  const [descCat, setDescCat] = useState(props.agendaDay?.discount_category ?? "todas");
+  const [evento, setEvento] = useState(props.agendaDay?.event ?? template?.event ?? "");
+  const [saving, setSaving] = useState(false);
 
   function goTo(newDate: string) {
     router.push(`/agenda?date=${newDate}`);
-  }
-
-  // Copia la plantilla del día de semana al formulario — no guarda sola, para
-  // que un evento especial (excepción) se pueda ajustar antes de "Guardar día".
-  function applyTemplate() {
-    if (!template) return;
-    setStart(template.start_time?.slice(0, 5) ?? "");
-    setAdmon(template.shift_admin ?? "");
-    setMeta(template.daily_goal != null ? String(template.daily_goal) : "");
-    setPromo(template.promo ?? "");
-    setEvento(template.event ?? "");
   }
 
   async function saveDay() {
@@ -130,14 +127,11 @@ export function AgendaClient(props: Props) {
 
       <Section title="Operación del día">
         <div className="space-y-3 rounded-xl border border-border bg-surface p-3.5">
-          {!props.agendaDay && template && (
-            <button
-              type="button"
-              onClick={applyTemplate}
-              className="w-full rounded-lg border border-gold/40 bg-gold/10 py-2.5 text-[12.5px] font-bold text-gold"
-            >
-              📋 Es un día normal — aplicar plantilla de {WEEKDAY_LABELS[weekday]}
-            </button>
+          {usingTemplate && (
+            <div className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-2 text-[11px] text-gold">
+              📋 Prellenado con la plantilla de {WEEKDAY_LABELS[weekday]} — si es un evento especial, ajusta lo que cambie antes de
+              guardar.
+            </div>
           )}
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <div className="min-w-0 overflow-hidden">
