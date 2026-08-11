@@ -278,19 +278,21 @@ antes de asumir**, no inventar reglas.
    real (no necesitó patch, solo `seed.sql` actualizado).
 5. **Descartado por el usuario** — mostrar litros aproximados de un barril.
    Se dejó como qty simple (punto 4) en vez de esto.
-6. **Panel: total de productos con % de lo que hay vs. falta** — Panel ya
-   tiene `SummaryCard` con Bajo mínimo / En buen nivel / Aprovisionado (%) —
-   revisar si esto ya cubre el pedido o si quieren algo más granular.
-7. **Panel por productos de barra y cocina** (para saber qué hay en cada
-   área) — nuevo, filtrar Panel/Inventario por domain.
+6. Panel ya tenía `SummaryCard` con Bajo mínimo / En buen nivel /
+   Aprovisionado (%) desde antes — no se tocó, no se pidió más detalle.
+7. ✅ **Panel por productos de barra y cocina** — hecho. Nueva sección
+   "Barra y Cocina — qué hay" en Panel, dos listas (categorías `barra` y
+   `cocina`, no domain completo) con el estado de CADA item, no solo los
+   críticos — para saber de un vistazo qué hay en cada área.
 8. ✅ **Que un segundo pedido a la misma mesa no aparezca como "pedido
    nuevo"** — hecho, solo visual (el usuario confirmó que no hacía falta
    fusionar a nivel de datos): Vender y Pedidos-cocina agrupan por
    `table_label`, una tarjeta por mesa con los pedidos de esa mesa adentro.
    Cada `orders` row sigue siendo independiente.
-9. **Que el mesero vea lo que agrega antes de registrar el pedido** — Vender
-   ya muestra un carrito (cantidad + total) pegado abajo; falta una vista de
-   detalle/confirmación itemizada antes de "Registrar pedido".
+9. ✅ **Que el mesero vea lo que agrega antes de registrar el pedido** —
+   hecho. Encima del botón "Registrar pedido" ahora se ve el detalle
+   itemizado del carrito (cantidad, producto, nota, precio), no solo el
+   total y la cuenta de productos que ya mostraba antes.
 10. ✅ **Alerta de descuadre si la caja de ayer no cuadra** — hecho. Banner
     rojo en Panel si `|efectivo+tarjetas contado − ventas app| > $1.000`
     (misma tolerancia que ya usaba Caja para su propio indicador inline).
