@@ -1,11 +1,11 @@
 -- ============================================================================
--- CATCHUP: todos los patches hasta 0017 en un solo archivo, seguro de correr
+-- CATCHUP: todos los patches hasta 0019 en un solo archivo, seguro de correr
 -- las veces que sea (cada pieza revisa si ya existe antes de crearla). Úsalo
 -- en vez de ir patch por patch — corre esto una vez y quedas al día.
 --
 -- Este archivo SIEMPRE se llama CATCHUP.sql (nombre fijo, no cambia con cada
 -- patch nuevo) — así el link/atajo a este archivo nunca se rompe. Si ves un
--- número más alto que 0017 en supabase/patches/, este archivo ya no está al
+-- número más alto que 0019 en supabase/patches/, este archivo ya no está al
 -- día — pídele a Claude que lo regenere.
 -- ============================================================================
 
@@ -880,3 +880,49 @@ with check (bucket_id = 'happy-pub-photos' and (storage.foldername(name))[1] = '
 select policyname, cmd from pg_policies
 where schemaname = 'storage' and tablename = 'objects'
   and (policyname ilike '%agenda%' or policyname ilike '%checklist%');
+
+-- ---------------------------------------------------------------------------
+-- 0018_mesero_rate_medianoche.sql
+-- ---------------------------------------------------------------------------
+-- Patch: la tarifa de mesero pasa de 3 franjas (antes de 11pm / 11pm-1am /
+-- después de 1am) a 2, separadas a medianoche — $8.000 antes, $8.500 desde
+-- medianoche. Ya está reflejado en supabase/schema.sql para instalaciones
+-- nuevas — esto es solo para aplicarlo sobre el proyecto que ya corriste.
+-- Correr después de 0001-0017.
+
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'hourly_rates' and column_name = 'mesero_t1') then
+    alter table public.hourly_rates rename column mesero_t1 to mesero_antes_medianoche;
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'hourly_rates' and column_name = 'mesero_t2') then
+    alter table public.hourly_rates rename column mesero_t2 to mesero_despues_medianoche;
+  end if;
+end $$;
+
+alter table public.hourly_rates drop column if exists mesero_t3;
+
+update public.hourly_rates set mesero_antes_medianoche = 8000, mesero_despues_medianoche = 8500 where id = 1;
+
+-- ---------------------------------------------------------------------------
+-- 0019_monthly_goal.sql
+-- ---------------------------------------------------------------------------
+-- Patch: meta mensual mínima ("para no estar en rojos"), solo-jefe, editable
+-- desde Panel. Ya está reflejado en supabase/schema.sql para instalaciones
+-- nuevas — esto es solo para aplicarlo sobre el proyecto que ya corriste.
+-- Correr después de 0001-0018.
+
+create table if not exists public.monthly_goal_settings (
+  id        integer primary key default 1,
+  min_goal  numeric not null default 19000000,
+  constraint monthly_goal_settings_singleton check (id = 1)
+);
+comment on table public.monthly_goal_settings is 'Meta mensual mínima de punto de equilibrio, editable por jefe — ver Panel.';
+
+insert into public.monthly_goal_settings (id, min_goal) values (1, 19000000) on conflict (id) do nothing;
+
+alter table public.monthly_goal_settings enable row level security;
+
+drop policy if exists "monthly_goal_settings: solo jefe" on public.monthly_goal_settings;
+create policy "monthly_goal_settings: solo jefe" on public.monthly_goal_settings for all to authenticated
+  using (public.is_jefe()) with check (public.is_jefe());

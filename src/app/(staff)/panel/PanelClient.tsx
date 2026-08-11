@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { normalizeStatus, isCriticalItem, type RawItemStatus, type ItemStatus } from "@/lib/inventory-status";
 import { levelOf, type StatusGaugeKey } from "@/lib/constants/status-levels";
 import { fmtCOP, fmtDateShort, fmtHM, fmtQty, fmtRelTime, bogotaDateOf } from "@/lib/format";
-import { Section, EmptyState, Row } from "@/components/panel-ui";
+import { Section, EmptyState, Row, MiniButton } from "@/components/panel-ui";
 import { APERTURA_ITEMS, CIERRE_ITEMS, allChecked } from "@/lib/constants/checklist-areas";
 import { generateWeeklyReportPdf, exportCajaCsv } from "./reports";
 
@@ -57,6 +57,9 @@ type Props = {
   initialActivity: ActivityRow[];
   users: { id: string; name: string }[];
   currentUserName: string;
+  monthlyGoal: number | null;
+  ventasMes: number;
+  cajaAyerDiferencia: number | null;
 };
 
 
@@ -78,6 +81,18 @@ export function PanelClient(props: Props) {
   const [reportToast, setReportToast] = useState<string | null>(null);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
+  const [monthlyGoalInput, setMonthlyGoalInput] = useState(props.monthlyGoal != null ? String(props.monthlyGoal) : "");
+  const [savingMonthlyGoal, setSavingMonthlyGoal] = useState(false);
+
+  async function saveMonthlyGoal() {
+    setSavingMonthlyGoal(true);
+    try {
+      await supabase.from("monthly_goal_settings").update({ min_goal: Number(monthlyGoalInput) || 0 }).eq("id", 1);
+      showReportToast("Meta mensual guardada ✓");
+    } finally {
+      setSavingMonthlyGoal(false);
+    }
+  }
   const [uploadingDrive, setUploadingDrive] = useState(false);
 
   function showReportToast(msg: string) {
@@ -266,8 +281,17 @@ export function PanelClient(props: Props) {
   }, [props.stockHistoryWeek]);
   const stockItems = props.initialItems.filter((it) => it.mode === "qty" && it.category === stockFilter);
 
+  const descuadreAyer = props.cajaAyerDiferencia != null && Math.abs(props.cajaAyerDiferencia) > 1000 ? props.cajaAyerDiferencia : null;
+
   return (
     <div>
+      {descuadreAyer != null && (
+        <div className="mb-3.5 rounded-xl border border-red/40 bg-red/10 px-3 py-2.5 text-[11.5px] leading-relaxed text-red">
+          ⚠️ <b>Descuadre en la caja de ayer:</b> {descuadreAyer >= 0 ? "sobran" : "faltan"} {fmtCOP(Math.abs(descuadreAyer))}{" "}
+          (efectivo + tarjetas contados vs. ventas registradas en la app).
+        </div>
+      )}
+
       <Section title="Personal en sitio ahora">
         {personalEnSitio.length === 0 ? (
           <EmptyState text="Nadie marcado como presente ahora mismo." />
@@ -292,6 +316,19 @@ export function PanelClient(props: Props) {
           ) : (
             <div className="text-[11.5px] text-text-dim">Sin meta semanal — defínela en Agenda.</div>
           )}
+          {props.monthlyGoal && <GoalBar label="Mes (mínimo para no estar en rojos)" current={props.ventasMes} goal={props.monthlyGoal} />}
+          <div className="flex items-center gap-1.5 border-t border-border/50 pt-2.5">
+            <input
+              type="number"
+              value={monthlyGoalInput}
+              onChange={(e) => setMonthlyGoalInput(e.target.value)}
+              placeholder="Ej: 19000000"
+              className="w-full min-w-0 rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-[12px] font-semibold text-text"
+            />
+            <MiniButton onClick={saveMonthlyGoal} disabled={savingMonthlyGoal}>
+              Guardar meta mensual
+            </MiniButton>
+          </div>
         </div>
       </Section>
 

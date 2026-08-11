@@ -290,16 +290,15 @@ comment on table public.attendance is
   'unique es (user_id, date, work_type) en vez de (user_id, date).';
 
 create table public.hourly_rates (
-  id                  integer primary key default 1 check (id = 1), -- fila única (singleton)
-  mesero_t1           numeric not null, -- antes de 11pm
-  mesero_t2           numeric not null, -- 11pm a 1am
-  mesero_t3           numeric not null, -- después de 1am
-  cocinero_flat       numeric not null, -- tarifa plana
-  administracion_flat numeric not null default 0, -- tarifa plana — turnos de administración (no estaba en el original)
-  updated_at          timestamptz not null default now(),
-  updated_by          uuid references public.users(id)
+  id                      integer primary key default 1 check (id = 1), -- fila única (singleton)
+  mesero_antes_medianoche numeric not null, -- antes de las 12am
+  mesero_despues_medianoche numeric not null, -- desde las 12am
+  cocinero_flat           numeric not null, -- tarifa plana
+  administracion_flat     numeric not null default 0, -- tarifa plana — turnos de administración (no estaba en el original)
+  updated_at              timestamptz not null default now(),
+  updated_by              uuid references public.users(id)
 );
-comment on table public.hourly_rates is 'DEFAULT_RATES del HTML original (+ administracion_flat, agregada después) — editable solo por jefe desde Personal.';
+comment on table public.hourly_rates is 'DEFAULT_RATES del HTML original (+ administracion_flat, agregada después) — editable solo por jefe desde Personal. Mesero: 2 franjas separadas a medianoche (antes 3 franjas separadas a 11pm/1am).';
 
 create table public.geofence_settings (
   id              integer primary key default 1 check (id = 1), -- fila única (singleton)
@@ -334,6 +333,17 @@ create table public.weekly_goals (
   goal         numeric not null
 );
 comment on table public.weekly_goals is 'shared.metasSemanales[mondayISO] del original.';
+
+-- Meta mensual mínima ("para no estar en rojos") — un solo valor editable por
+-- jefe, no una fila por mes: es el mismo umbral de punto de equilibrio del
+-- negocio, no algo que cambie mes a mes. Solo-jefe, ni mesero ni cocinero la
+-- ven (a diferencia de la meta diaria/semanal, que si son operativas).
+create table public.monthly_goal_settings (
+  id        integer primary key default 1,
+  min_goal  numeric not null default 19000000,
+  constraint monthly_goal_settings_singleton check (id = 1)
+);
+comment on table public.monthly_goal_settings is 'Meta mensual mínima de punto de equilibrio, editable por jefe — ver Panel.';
 
 create table public.shifts (
   id              uuid primary key default gen_random_uuid(),
@@ -1100,6 +1110,7 @@ alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
 alter table public.attendance enable row level security;
 alter table public.hourly_rates enable row level security;
+alter table public.monthly_goal_settings enable row level security;
 alter table public.geofence_settings enable row level security;
 alter table public.agenda_days enable row level security;
 alter table public.weekly_goals enable row level security;
@@ -1256,6 +1267,11 @@ create policy "attendance: actualizar propia (hoy) o jefe corrige cualquier fech
 
 create policy "hourly_rates: lectura autenticados" on public.hourly_rates for select to authenticated using (true);
 create policy "hourly_rates: edicion jefe" on public.hourly_rates for update to authenticated using (public.is_jefe()) with check (public.is_jefe());
+
+-- Meta mensual: a diferencia de tarifas/geocerca, ni mesero ni cocinero la
+-- necesitan leer — es "para no estar en rojos", información de jefe.
+create policy "monthly_goal_settings: solo jefe" on public.monthly_goal_settings for all to authenticated
+  using (public.is_jefe()) with check (public.is_jefe());
 
 create policy "geofence_settings: lectura autenticados" on public.geofence_settings for select to authenticated using (true);
 create policy "geofence_settings: edicion jefe" on public.geofence_settings for update to authenticated using (public.is_jefe()) with check (public.is_jefe());

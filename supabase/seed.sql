@@ -36,6 +36,16 @@ insert into public.items (id, name, category, mode, unit, step, min) values
   ('barril_brown',    'Brown (Merak)',             'barra', 'gauge', null, null, null),
   ('barril_roja_aaa', 'Roja AAA (Merak)',          'barra', 'gauge', null, null, null),
   ('barril_temporada','De Temporada',              'barra', 'gauge', null, null, null),
+  -- Barriles de repuesto — mismo patrón que "Botellas de repuesto" de insumos_coctel:
+  -- cantidad de barriles llenos sin abrir en bodega, aparte del que está en uso arriba.
+  ('barril_gulupa_repuesto',    'Happy Gulupa — Barril de repuesto',           'barra', 'qty', 'und', 1, 1),
+  ('barril_germania_repuesto',  'Germania — Barril de repuesto',               'barra', 'qty', 'und', 1, 1),
+  ('barril_amber_repuesto',     'Amber Ale (Red IPA) — Barril de repuesto',    'barra', 'qty', 'und', 1, 1),
+  ('barril_negra_repuesto',     'Negra (3 Cordilleras) — Barril de repuesto',  'barra', 'qty', 'und', 1, 1),
+  ('barril_mulata_repuesto',    'Mulata (3 Cordilleras) — Barril de repuesto', 'barra', 'qty', 'und', 1, 1),
+  ('barril_brown_repuesto',     'Brown (Merak) — Barril de repuesto',          'barra', 'qty', 'und', 1, 1),
+  ('barril_roja_aaa_repuesto',  'Roja AAA (Merak) — Barril de repuesto',       'barra', 'qty', 'und', 1, 1),
+  ('barril_temporada_repuesto', 'De Temporada — Barril de repuesto',           'barra', 'qty', 'und', 1, 1),
   ('co2_interno',     'CO2 — Interno',             'barra', 'gauge', null, null, null),
   ('co2_sonido',      'CO2 — Área de sonido',      'barra', 'gauge', null, null, null),
 
@@ -422,8 +432,10 @@ insert into public.menu_item_ingredients (menu_item_id, item_id, qty) values
 -- ============================================================================
 -- TARIFAS POR HORA (DEFAULT_RATES)
 -- ============================================================================
-insert into public.hourly_rates (id, mesero_t1, mesero_t2, mesero_t3, cocinero_flat)
-values (1, 8000, 8500, 9000, 9500);
+insert into public.hourly_rates (id, mesero_antes_medianoche, mesero_despues_medianoche, cocinero_flat)
+values (1, 8000, 8500, 9500);
+
+insert into public.monthly_goal_settings (id, min_goal) values (1, 19000000);
 
 -- ============================================================================
 -- GEOCERCA (VENUE, ARRIVE_RADIUS_M, LEAVE_RADIUS_M)

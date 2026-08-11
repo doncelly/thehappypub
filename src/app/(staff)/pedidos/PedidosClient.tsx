@@ -90,6 +90,16 @@ export function PedidosClient({ initialOrders, initialOrderItems, users }: Props
   const pending = orders.filter((o) => !o.kitchen_ack_at).sort((a, b) => a.created_at.localeCompare(b.created_at));
   const done = orders.filter((o) => o.kitchen_ack_at).sort((a, b) => b.created_at.localeCompare(a.created_at));
 
+  // Agrupados por mesa — si una mesa pide dos veces y ambos siguen
+  // pendientes, se ve como una sola tarjeta con los dos adentro, no como una
+  // alerta de "pedido nuevo" repetida por cada uno.
+  const pendingByTable: [string, OrderRow[]][] = [];
+  for (const o of pending) {
+    const group = pendingByTable.find(([table]) => table === o.table_label);
+    if (group) group[1].push(o);
+    else pendingByTable.push([o.table_label, [o]]);
+  }
+
   return (
     <div>
       {!soundOn && (
@@ -102,39 +112,50 @@ export function PedidosClient({ initialOrders, initialOrderItems, users }: Props
       )}
 
       <Section title={`Pedidos pendientes${pending.length ? ` (${pending.length})` : ""}`}>
-        {pending.length === 0 ? (
+        {pendingByTable.length === 0 ? (
           <EmptyState text="No hay pedidos esperando en cocina." />
         ) : (
           <div className="space-y-2">
-            {pending.map((o) => {
-              const lines = orderItems.filter((oi) => oi.order_id === o.id);
-              return (
-                <div key={o.id} className="rounded-xl border border-gold/40 bg-gold/5 p-3">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="text-[14px] font-bold">Mesa {o.table_label}</span>
-                    <span className="font-mono text-[11px] text-text-faint">{fmtHM(o.created_at)}</span>
-                  </div>
-                  <div className="mt-0.5 text-[10px] text-text-faint">{usersById[o.user_id] ?? "—"}</div>
-                  {lines.length > 0 && (
-                    <ul className="mt-2 space-y-0.5 text-[12.5px]">
-                      {lines.map((l, i) => (
-                        <li key={i}>
-                          <span className="font-bold">{l.qty}x</span> {l.name}
-                          {l.note ? <span className="text-text-dim"> ({l.note})</span> : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <button
-                    onClick={() => ack(o.id)}
-                    disabled={ackingId === o.id}
-                    className="mt-2.5 w-full rounded-lg bg-gold py-2 text-[12.5px] font-bold text-[#1A140D] disabled:opacity-50"
-                  >
-                    {ackingId === o.id ? "Marcando…" : "✓ Recibido / en preparación"}
-                  </button>
+            {pendingByTable.map(([table, tableOrders]) => (
+              <div key={table} className="rounded-xl border border-gold/40 bg-gold/5 p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[14px] font-bold">
+                    Mesa {table}
+                    {tableOrders.length > 1 && <span className="ml-1 font-normal text-text-faint">({tableOrders.length} pedidos)</span>}
+                  </span>
                 </div>
-              );
-            })}
+                <div className="mt-1.5 space-y-2.5 divide-y divide-gold/20">
+                  {tableOrders.map((o) => {
+                    const lines = orderItems.filter((oi) => oi.order_id === o.id);
+                    return (
+                      <div key={o.id} className="pt-2.5 first:pt-0">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-[10px] text-text-faint">{usersById[o.user_id] ?? "—"}</span>
+                          <span className="font-mono text-[11px] text-text-faint">{fmtHM(o.created_at)}</span>
+                        </div>
+                        {lines.length > 0 && (
+                          <ul className="mt-1 space-y-0.5 text-[12.5px]">
+                            {lines.map((l, i) => (
+                              <li key={i}>
+                                <span className="font-bold">{l.qty}x</span> {l.name}
+                                {l.note ? <span className="text-text-dim"> ({l.note})</span> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <button
+                          onClick={() => ack(o.id)}
+                          disabled={ackingId === o.id}
+                          className="mt-2 w-full rounded-lg bg-gold py-2 text-[12.5px] font-bold text-[#1A140D] disabled:opacity-50"
+                        >
+                          {ackingId === o.id ? "Marcando…" : "✓ Recibido / en preparación"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </Section>

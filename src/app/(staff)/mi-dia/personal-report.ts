@@ -41,7 +41,7 @@ export async function generatePersonalReportPdf(supabase: SupabaseClient<any>, t
   if (rates) {
     if (fixedWorkType === "cocinero") line(`Tarifa: ${fmtCOP(rates.cocinero_flat)}/hora (plana)`, 9);
     else if (!fixedWorkType) line(`Tarifas: mesero por franja, o administración ${fmtCOP(rates.administracion_flat)}/hora (plana)`, 9);
-    else line(`Tarifas: antes 11pm ${fmtCOP(rates.mesero_t1)}/h · 11pm-1am ${fmtCOP(rates.mesero_t2)}/h · después 1am ${fmtCOP(rates.mesero_t3)}/h`, 9);
+    else line(`Tarifas: antes de medianoche ${fmtCOP(rates.mesero_antes_medianoche)}/h · desde medianoche ${fmtCOP(rates.mesero_despues_medianoche)}/h`, 9);
   }
   space(3);
 

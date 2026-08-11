@@ -16,6 +16,12 @@ export default async function PanelPage() {
   const days = weekDates(monday);
   const sunday = days[6];
   const weekRange = { start: bogotaDayRangeUTC(monday).start, end: bogotaDayRangeUTC(sunday).end };
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const monthRange = { start: bogotaDayRangeUTC(monthStart).start, end: bogotaDayRangeUTC(today).end };
+  const yesterdayDate = new Date(`${today}T12:00:00`);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = yesterdayDate.toISOString().slice(0, 10);
+  const yesterdayRange = bogotaDayRangeUTC(yesterday);
 
   const [
     { data: categories, error: categoriesError },
@@ -30,6 +36,10 @@ export default async function PanelPage() {
     { data: checklistToday, error: checklistError },
     { data: activity, error: activityError },
     { data: users, error: usersError },
+    { data: monthlyGoal, error: monthlyGoalError },
+    { data: ordersMonth, error: ordersMonthError },
+    { data: cashRegisterYesterday, error: cashYesterdayError },
+    { data: ordersYesterday, error: ordersYesterdayError },
   ] = await Promise.all([
     supabase.from("categories").select("id, label, domain, sort_order").order("sort_order"),
     supabase
@@ -54,6 +64,10 @@ export default async function PanelPage() {
     supabase.from("checklist_entries").select("user_id, section, done, areas").eq("date", today),
     supabase.from("activity_log").select("id, message, color, created_at").order("created_at", { ascending: false }).limit(15),
     supabase.from("users").select("id, name"),
+    supabase.from("monthly_goal_settings").select("min_goal").eq("id", 1).maybeSingle(),
+    supabase.from("orders").select("total").gte("created_at", monthRange.start).lte("created_at", monthRange.end),
+    supabase.from("cash_register").select("cash_amount, card_amount, close_time").eq("date", yesterday).maybeSingle(),
+    supabase.from("orders").select("total").gte("created_at", yesterdayRange.start).lte("created_at", yesterdayRange.end),
   ]);
 
   for (const [label, error] of Object.entries({
@@ -69,9 +83,20 @@ export default async function PanelPage() {
     checklistError,
     activityError,
     usersError,
+    monthlyGoalError,
+    ordersMonthError,
+    cashYesterdayError,
+    ordersYesterdayError,
   })) {
     logSupabaseError(`PanelPage ${label}`, error);
   }
+
+  const cajaAyerDiferencia =
+    cashRegisterYesterday?.cash_amount != null
+      ? Number(cashRegisterYesterday.cash_amount) +
+        Number(cashRegisterYesterday.card_amount ?? 0) -
+        (ordersYesterday ?? []).reduce((s, o) => s + o.total, 0)
+      : null;
 
   return (
     <PanelClient
@@ -91,6 +116,9 @@ export default async function PanelPage() {
       initialActivity={activity ?? []}
       users={users ?? []}
       currentUserName={user.name}
+      monthlyGoal={monthlyGoal?.min_goal ?? null}
+      ventasMes={(ordersMonth ?? []).reduce((s, o) => s + o.total, 0)}
+      cajaAyerDiferencia={cajaAyerDiferencia}
     />
   );
 }

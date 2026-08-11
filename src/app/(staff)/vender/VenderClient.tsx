@@ -209,6 +209,17 @@ export function VenderClient(props: Props) {
   const pairNameById = Object.fromEntries(props.initialPairItems.map((it) => [it.id, it.name]));
   const todaysOrders = orders.filter((o) => o.id); // ya vienen filtrados por hoy desde el server
 
+  // Agrupados por mesa — si piden dos veces, se ve como una sola tarjeta con
+  // los dos pedidos adentro, no como dos tarjetas repetidas. todaysOrders ya
+  // viene del más reciente al más antiguo, así que la mesa con la actividad
+  // más reciente queda primera.
+  const ordersByTable: [string, OrderRow[]][] = [];
+  for (const o of todaysOrders) {
+    const group = ordersByTable.find(([table]) => table === o.table_label);
+    if (group) group[1].push(o);
+    else ordersByTable.push([o.table_label, [o]]);
+  }
+
   return (
     <div>
       {(mismatches.length > 0 || (props.discountPct && props.discountPct > 0)) && (
@@ -370,37 +381,52 @@ export function VenderClient(props: Props) {
             <EmptyState text="Todavía no se han registrado pedidos hoy." />
           ) : (
             <div className="space-y-1.5">
-              {todaysOrders.map((o) => {
-                const lines = orderItems.filter((oi) => oi.order_id === o.id);
+              {ordersByTable.map(([table, tableOrders]) => {
+                const tableTotal = tableOrders.reduce((s, o) => s + o.total, 0);
                 return (
-                  <div key={o.id} className="rounded-xl border border-border bg-surface p-2.5">
+                  <div key={table} className="rounded-xl border border-border bg-surface p-2.5">
                     <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-[12px] font-bold">Mesa {o.table_label}</span>
-                      <span className="font-mono text-[11.5px] text-gold">{fmtCOP(o.total)}</span>
+                      <span className="text-[12px] font-bold">
+                        Mesa {table}
+                        {tableOrders.length > 1 && <span className="ml-1 font-normal text-text-faint">({tableOrders.length} pedidos)</span>}
+                      </span>
+                      <span className="font-mono text-[11.5px] text-gold">{fmtCOP(tableTotal)}</span>
                     </div>
-                    <div className="mt-0.5 text-[10px] text-text-faint">
-                      {usersById[o.user_id] ?? "—"} · {fmtRelTime(o.created_at)}
+                    <div className="mt-1.5 space-y-2 divide-y divide-border">
+                      {tableOrders.map((o) => {
+                        const lines = orderItems.filter((oi) => oi.order_id === o.id);
+                        return (
+                          <div key={o.id} className={tableOrders.length > 1 ? "pt-2 first:pt-0" : ""}>
+                            <div className="flex items-baseline justify-between gap-2 text-[10px] text-text-faint">
+                              <span>
+                                {usersById[o.user_id] ?? "—"} · {fmtRelTime(o.created_at)}
+                              </span>
+                              {tableOrders.length > 1 && <span className="font-mono">{fmtCOP(o.total)}</span>}
+                            </div>
+                            {lines.length > 0 && (
+                              <div className="mt-0.5 text-[11px] leading-relaxed text-text-dim">
+                                {lines.map((l, i) => (
+                                  <span key={i}>
+                                    {i > 0 && ", "}
+                                    {l.qty}x {l.name}
+                                    {l.note ? ` (${l.note})` : ""}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {(currentUserRole === "jefe" || o.user_id === currentUserId) && (
+                              <button
+                                onClick={() => voidOrder(o.id)}
+                                disabled={voidingOrderId === o.id}
+                                className="mt-1.5 rounded-md border border-red/40 px-2 py-1 text-[10.5px] font-bold text-red disabled:opacity-40"
+                              >
+                                {voidingOrderId === o.id ? "Anulando…" : "Anular este pedido"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                    {lines.length > 0 && (
-                      <div className="mt-1.5 text-[11px] leading-relaxed text-text-dim">
-                        {lines.map((l, i) => (
-                          <span key={i}>
-                            {i > 0 && ", "}
-                            {l.qty}x {l.name}
-                            {l.note ? ` (${l.note})` : ""}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {(currentUserRole === "jefe" || o.user_id === currentUserId) && (
-                      <button
-                        onClick={() => voidOrder(o.id)}
-                        disabled={voidingOrderId === o.id}
-                        className="mt-1.5 rounded-md border border-red/40 px-2 py-1 text-[10.5px] font-bold text-red disabled:opacity-40"
-                      >
-                        {voidingOrderId === o.id ? "Anulando…" : "Anular pedido"}
-                      </button>
-                    )}
                   </div>
                 );
               })}

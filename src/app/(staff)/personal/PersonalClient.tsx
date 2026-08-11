@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Section, EmptyState, FieldLabel, inputCls, MiniButton } from "@/components/panel-ui";
 
 type UserRow = { id: string; name: string; role: "jefe" | "staff"; subrole: "mesero" | "cocinero" | null; active: boolean };
-type Rates = { mesero_t1: number; mesero_t2: number; mesero_t3: number; cocinero_flat: number; administracion_flat: number } | null;
+type Rates = { mesero_antes_medianoche: number; mesero_despues_medianoche: number; cocinero_flat: number; administracion_flat: number } | null;
 type Geofence = { arrive_radius_m: number; leave_radius_m: number } | null;
 
 type Props = {
@@ -31,9 +31,8 @@ export function PersonalClient({ users, rates, geofence }: Props) {
   const [banner, setBanner] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [rMeseroT1, setRMeseroT1] = useState(String(rates?.mesero_t1 ?? ""));
-  const [rMeseroT2, setRMeseroT2] = useState(String(rates?.mesero_t2 ?? ""));
-  const [rMeseroT3, setRMeseroT3] = useState(String(rates?.mesero_t3 ?? ""));
+  const [rMeseroAntes, setRMeseroAntes] = useState(String(rates?.mesero_antes_medianoche ?? ""));
+  const [rMeseroDespues, setRMeseroDespues] = useState(String(rates?.mesero_despues_medianoche ?? ""));
   const [rCocineroFlat, setRCocineroFlat] = useState(String(rates?.cocinero_flat ?? ""));
   const [rAdminFlat, setRAdminFlat] = useState(String(rates?.administracion_flat ?? ""));
   const [savingRates, setSavingRates] = useState(false);
@@ -120,9 +119,8 @@ export function PersonalClient({ users, rates, geofence }: Props) {
       await supabase
         .from("hourly_rates")
         .update({
-          mesero_t1: Number(rMeseroT1) || 0,
-          mesero_t2: Number(rMeseroT2) || 0,
-          mesero_t3: Number(rMeseroT3) || 0,
+          mesero_antes_medianoche: Number(rMeseroAntes) || 0,
+          mesero_despues_medianoche: Number(rMeseroDespues) || 0,
           cocinero_flat: Number(rCocineroFlat) || 0,
           administracion_flat: Number(rAdminFlat) || 0,
         })
@@ -259,17 +257,13 @@ export function PersonalClient({ users, rates, geofence }: Props) {
         <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
           <div className="grid grid-cols-2 gap-2.5">
             <div>
-              <FieldLabel>Mesero — antes de 11pm ($/h)</FieldLabel>
-              <input type="number" value={rMeseroT1} onChange={(e) => setRMeseroT1(e.target.value)} className={inputCls} />
+              <FieldLabel>Mesero — antes de medianoche ($/h)</FieldLabel>
+              <input type="number" value={rMeseroAntes} onChange={(e) => setRMeseroAntes(e.target.value)} className={inputCls} />
             </div>
             <div>
-              <FieldLabel>Mesero — 11pm a 1am ($/h)</FieldLabel>
-              <input type="number" value={rMeseroT2} onChange={(e) => setRMeseroT2(e.target.value)} className={inputCls} />
+              <FieldLabel>Mesero — desde medianoche ($/h)</FieldLabel>
+              <input type="number" value={rMeseroDespues} onChange={(e) => setRMeseroDespues(e.target.value)} className={inputCls} />
             </div>
-          </div>
-          <div>
-            <FieldLabel>Mesero — después de 1am ($/h)</FieldLabel>
-            <input type="number" value={rMeseroT3} onChange={(e) => setRMeseroT3(e.target.value)} className={inputCls} />
           </div>
           <div>
             <FieldLabel>Cocinero — tarifa plana ($/h)</FieldLabel>
