@@ -338,6 +338,13 @@ export function PanelClient(props: Props) {
         <SummaryCard num={`${aprovPct}%`} label="Aprovisionado" />
       </div>
 
+      <Section title="Barra y Cocina — qué hay">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <BarraOcinaList title="🍺 Barra" items={items.filter((it) => it.category === "barra")} />
+          <BarraOcinaList title="🍳 Cocina" items={items.filter((it) => it.category === "cocina")} />
+        </div>
+      </Section>
+
       <Section title="Productos que faltan">
         {faltantes.length === 0 ? (
           <EmptyState text="Todo por encima del mínimo — nada falta ahora mismo." />
@@ -534,6 +541,32 @@ function SummaryCard({ num, label, alert }: { num: number | string; label: strin
     <div className="rounded-xl border border-border bg-surface px-2 py-3 text-center">
       <div className={`font-display text-xl font-bold ${alert ? "text-red" : "text-gold"}`}>{num}</div>
       <div className="mt-0.5 font-mono text-[9px] uppercase tracking-wide text-text-faint">{label}</div>
+    </div>
+  );
+}
+
+// Estado completo de una categoría (no solo lo crítico, como "Productos que
+// faltan") — para saber de un vistazo qué hay en Barra o en Cocina.
+function BarraOcinaList({ title, items }: { title: string; items: ItemRow[] }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-3">
+      <div className="mb-2 text-[12px] font-bold">{title}</div>
+      {items.length === 0 ? (
+        <p className="text-[11px] text-text-faint">Sin productos en esta categoría.</p>
+      ) : (
+        <div className="space-y-1">
+          {items.map((it) => {
+            const critical = isCriticalItem(it.mode, it.min, it.item_status);
+            const value = it.mode === "gauge" ? levelOf(it.item_status.status_gauge).label : fmtQty(it.unit ?? "", it.item_status.qty ?? 0);
+            return (
+              <div key={it.id} className="flex items-baseline justify-between gap-2 text-[11px]">
+                <span className="min-w-0 truncate">{it.name}</span>
+                <span className={`flex-none font-mono ${critical ? "text-red" : "text-text-dim"}`}>{value}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

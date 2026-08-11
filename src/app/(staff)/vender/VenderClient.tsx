@@ -361,18 +361,38 @@ export function VenderClient(props: Props) {
         })}
       </div>
 
-      <div className="sticky bottom-3 flex items-center justify-between rounded-2xl border border-border bg-surface px-3.5 py-3 shadow-lg">
-        <div className="text-[11px] text-text-dim">
-          {cartCount} producto{cartCount !== 1 ? "s" : ""}
-          <div className="font-display text-sm font-bold text-gold">{fmtCOP(cartTotal)}</div>
+      <div className="sticky bottom-3 rounded-2xl border border-border bg-surface px-3.5 py-3 shadow-lg">
+        {cartCount > 0 && (
+          <div className="mb-2.5 max-h-[35vh] space-y-1 overflow-y-auto border-b border-border pb-2.5">
+            {Object.entries(cart).map(([id, c]) => {
+              const m = props.menuItems.find((x) => x.id === id);
+              if (!m) return null;
+              const { price } = priceFor(m);
+              return (
+                <div key={id} className="flex items-baseline justify-between gap-2 text-[11.5px]">
+                  <span>
+                    <b>{c.qty}x</b> {m.name}
+                    {c.nota ? <span className="text-text-dim"> ({c.nota})</span> : null}
+                  </span>
+                  <span className="flex-none font-mono text-text-dim">{fmtCOP(price * c.qty)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] text-text-dim">
+            {cartCount} producto{cartCount !== 1 ? "s" : ""}
+            <div className="font-display text-sm font-bold text-gold">{fmtCOP(cartTotal)}</div>
+          </div>
+          <button
+            onClick={registrarPedido}
+            disabled={registering || cartCount === 0 || !selectedTable}
+            className="rounded-lg bg-gold px-4 py-2.5 text-[12px] font-bold text-[#1A140D] disabled:opacity-40"
+          >
+            {registering ? "Registrando…" : "Registrar pedido"}
+          </button>
         </div>
-        <button
-          onClick={registrarPedido}
-          disabled={registering || cartCount === 0 || !selectedTable}
-          className="rounded-lg bg-gold px-4 py-2.5 text-[12px] font-bold text-[#1A140D] disabled:opacity-40"
-        >
-          {registering ? "Registrando…" : "Registrar pedido"}
-        </button>
       </div>
 
       <div className="mt-5">
