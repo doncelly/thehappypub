@@ -13,7 +13,7 @@ export const GRAY: [number, number, number] = [110, 118, 165];
 export const HAPPY_GOLD = BRAND_GOLD;
 
 const HEADER_H = 26;
-const MARGIN_X = 14;
+export const MARGIN_X = 14;
 
 async function fetchDataUrl(path: string): Promise<string> {
   const res = await fetch(path);
@@ -105,5 +105,24 @@ export async function createReportDoc(title: string) {
     y += extra;
   }
 
-  return { doc, line, space };
+  // Para insertar contenido que no es texto línea-por-línea (p.ej. una tabla
+  // de jspdf-autotable) en el mismo flujo: leer dónde quedó el cursor,
+  // dibujar lo que sea con las coordenadas de doc directamente, y avisar acá
+  // dónde quedó para que el próximo line()/space() siga después, no encima.
+  function getY() {
+    return y;
+  }
+  function setY(newY: number) {
+    y = newY;
+  }
+  function ensureSpace(neededHeight: number) {
+    if (y + neededHeight > pageH - 15) {
+      doc.addPage();
+      pageNum++;
+      drawHeader();
+      y = HEADER_H + 12;
+    }
+  }
+
+  return { doc, line, space, getY, setY, ensureSpace };
 }

@@ -1472,6 +1472,14 @@ on storage.objects for insert to authenticated with check (
   )
 );
 
+-- El upload de agenda-schedules usa upsert (regenerar el PDF de una semana ya
+-- generada antes hace un UPDATE, no un INSERT) — sin esta policy, upsert
+-- fallaba por RLS aunque insert por sí solo hubiera funcionado.
+create policy "storage: agenda-schedules jefe actualiza"
+on storage.objects for update to authenticated
+using (bucket_id = 'happy-pub-photos' and (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe())
+with check (bucket_id = 'happy-pub-photos' and (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe());
+
 -- ============================================================================
 -- 18. REALTIME (Paso 3) — se deja activado de una vez, no hace daño antes de tiempo
 -- ============================================================================

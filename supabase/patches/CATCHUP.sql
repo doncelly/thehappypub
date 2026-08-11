@@ -1,11 +1,11 @@
 -- ============================================================================
--- CATCHUP: todos los patches hasta 0016 en un solo archivo, seguro de correr
+-- CATCHUP: todos los patches hasta 0017 en un solo archivo, seguro de correr
 -- las veces que sea (cada pieza revisa si ya existe antes de crearla). Úsalo
 -- en vez de ir patch por patch — corre esto una vez y quedas al día.
 --
 -- Este archivo SIEMPRE se llama CATCHUP.sql (nombre fijo, no cambia con cada
 -- patch nuevo) — así el link/atajo a este archivo nunca se rompe. Si ves un
--- número más alto que 0016 en supabase/patches/, este archivo ya no está al
+-- número más alto que 0017 en supabase/patches/, este archivo ya no está al
 -- día — pídele a Claude que lo regenere.
 -- ============================================================================
 
@@ -821,3 +821,48 @@ begin
       add constraint shift_schedule_templates_slot_unique unique (weekday, shift_type, slot_label);
   end if;
 end $$;
+
+-- ---------------------------------------------------------------------------
+-- 0017_fix_storage_schedule_policy.sql
+-- ---------------------------------------------------------------------------
+-- Patch: el patch 0015 no quedó aplicado correctamente (verificado en vivo:
+-- subir el PDF de horario sigue rechazado por RLS). Este archivo es corto a
+-- propósito — solo la política de Storage, para descartar cualquier problema
+-- de copiado del CATCHUP.sql grande. Seguro de correr las veces que sea.
+
+drop policy if exists "storage: checklist propio o jefe lee" on storage.objects;
+create policy "storage: checklist propio o jefe lee"
+on storage.objects for select to authenticated using (
+  bucket_id = 'happy-pub-photos' and (
+    public.is_jefe() or
+    ( (storage.foldername(name))[1] = 'checklist' and (storage.foldername(name))[3] = public.current_user_id()::text ) or
+    (storage.foldername(name))[1] = 'deliveries' or
+    (storage.foldername(name))[1] = 'agenda-schedules'
+  )
+);
+
+drop policy if exists "storage: checklist propio sube" on storage.objects;
+create policy "storage: checklist propio sube"
+on storage.objects for insert to authenticated with check (
+  bucket_id = 'happy-pub-photos' and (
+    ( (storage.foldername(name))[1] = 'checklist' and (storage.foldername(name))[3] = public.current_user_id()::text ) or
+    (storage.foldername(name))[1] = 'deliveries' or
+    ( (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe() )
+  )
+);
+
+-- Falta también permiso de UPDATE para agenda-schedules: subir un PDF de una
+-- semana que ya se había generado antes (upsert) hace un UPDATE, no un
+-- INSERT, y hasta ahora storage.objects no tenía ninguna policy de update.
+drop policy if exists "storage: agenda-schedules jefe actualiza" on storage.objects;
+create policy "storage: agenda-schedules jefe actualiza"
+on storage.objects for update to authenticated
+using (bucket_id = 'happy-pub-photos' and (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe())
+with check (bucket_id = 'happy-pub-photos' and (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe());
+
+-- Verificación rápida — debería mostrar 4 filas (select, insert, update +
+-- la de update nueva). Si esto sale vacío después de correr lo de arriba,
+-- algo bloqueó las sentencias anteriores y hay que avisarle a Claude.
+select policyname, cmd from pg_policies
+where schemaname = 'storage' and tablename = 'objects'
+  and (policyname ilike '%agenda%' or policyname ilike '%checklist%');
