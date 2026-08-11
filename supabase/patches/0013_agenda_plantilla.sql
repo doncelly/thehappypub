@@ -32,6 +32,19 @@ create table if not exists public.shift_schedule_templates (
 );
 comment on table public.shift_schedule_templates is 'Plantilla editable de horarios por slot de turno y día de semana — ver Agenda → Plantilla.';
 
+-- Necesaria para que el insert de más abajo pueda usar "on conflict" y este
+-- patch sea seguro de correr más de una vez (antes no la tenía; si ya la
+-- agregó el patch 0016 en una corrida anterior, este bloque no hace nada).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'shift_schedule_templates_slot_unique'
+  ) then
+    alter table public.shift_schedule_templates
+      add constraint shift_schedule_templates_slot_unique unique (weekday, shift_type, slot_label);
+  end if;
+end $$;
+
 alter table public.weekday_templates enable row level security;
 alter table public.shift_schedule_templates enable row level security;
 
@@ -72,4 +85,5 @@ insert into public.shift_schedule_templates (weekday, shift_type, slot_label, sc
   (6, 'mesa',   'Mesas 1',  '14:00 A CIERRE', 1),
   (6, 'mesa',   'Mesas 2',  '19:00 A CIERRE', 2),
   (0, 'cocina', 'Cocina 1', '13:00 A CIERRE', 1),
-  (0, 'mesa',   'Mesas 1',  '13:00 A CIERRE', 1);
+  (0, 'mesa',   'Mesas 1',  '13:00 A CIERRE', 1)
+on conflict (weekday, shift_type, slot_label) do nothing;
