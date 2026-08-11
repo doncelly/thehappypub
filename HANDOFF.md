@@ -82,6 +82,13 @@ Pega este archivo completo como primer mensaje. El asistente debe:
 - **`attendance.work_type`**: un jefe puede cubrir turno de **mesero** y de
   **administración** el mismo día — cada uno con su propia tarifa. Unique
   constraint es `(user_id, date, work_type)`, no `(user_id, date)`.
+- **Tarifa de mesero — 2 franjas separadas a medianoche** (antes 3 franjas a
+  11pm/1am): `hourly_rates.mesero_antes_medianoche`/`mesero_despues_medianoche`.
+  `shiftEarnings()`/`splitShiftMinutes()` en `src/lib/earnings.ts` recalculan
+  SIEMPRE en vivo a partir de `attendance` + la tarifa ACTUAL — no hay
+  snapshot histórico por turno, así que cambiar `hourly_rates` cambia
+  retroactivamente cómo se ve el pago de turnos viejos también (es el mismo
+  comportamiento de siempre, no algo nuevo de este cambio).
 - **Regla de pureza de React 19 / eslint-hooks**: `Date.now()` / `new Date()`
   sin argumentos / `crypto.randomUUID()` sueltos en el cuerpo de un componente
   los marca como error. Envolver en una función con nombre en un módulo
@@ -262,36 +269,31 @@ antes de asumir**, no inventar reglas.
 2. ✅ **Plantilla semanal para Agenda** (días normales vs. excepción) — ya
    construida (ver "Decisiones de arquitectura"). El usuario después pidió
    que el prellenado fuera automático sin botón — también hecho.
-3. **Meta mensual mínimo $19.000.000, "para no estar en rojos", solo
-   visible para administradores** — nuevo. Falta: dónde mostrarlo (¿Panel?),
-   si se calcula sobre ventas del mes calendario o algo distinto, si hay que
-   guardar el valor en una tabla (editable) o puede ir fijo por ahora.
-4. **Agregar "barriles de repuesto" en Inventario** — nuevo. Falta: en qué
-   categoría (¿la misma `barra` que ya tiene barriles, o una nueva?), qué
-   items exactos (nombres reales de los barriles de repuesto).
-5. **Para barriles medidos en litros, mostrar aprox. cuánto queda** — hoy
-   `items.mode='gauge'` para barriles solo tiene niveles discretos
-   (Completo/3-4/Mitad/1-4/Agotado), no litros. Nuevo modo o campo adicional.
-   Falta: ¿cuántos litros tiene un barril lleno (por tipo de barril)? ¿se
-   infiere del nivel discreto o se ingresa un número aparte?
+3. ✅ **Meta mensual mínimo $19.000.000** — hecho. `monthly_goal_settings`
+   (singleton, solo-jefe), editable en Panel junto a la meta diaria/semanal.
+   Patch 0019.
+4. ✅ **"Barriles de repuesto" en Inventario** — hecho. Un item qty-mode por
+   cada uno de los 8 barriles reales, mismo patrón que "Botellas de
+   repuesto" de insumos_coctel/shots. Dato insertado directo en la base
+   real (no necesitó patch, solo `seed.sql` actualizado).
+5. **Descartado por el usuario** — mostrar litros aproximados de un barril.
+   Se dejó como qty simple (punto 4) en vez de esto.
 6. **Panel: total de productos con % de lo que hay vs. falta** — Panel ya
    tiene `SummaryCard` con Bajo mínimo / En buen nivel / Aprovisionado (%) —
    revisar si esto ya cubre el pedido o si quieren algo más granular.
 7. **Panel por productos de barra y cocina** (para saber qué hay en cada
    área) — nuevo, filtrar Panel/Inventario por domain.
-8. **Que un segundo pedido a la misma mesa no aparezca como "pedido nuevo"**
-   — hoy cada `register_order` crea una fila nueva en `orders`; Vender y
-   Pedidos-cocina los listan todos por separado. Falta decidir: ¿se deben
-   agrupar visualmente por mesa en el mismo turno, o fusionar en un solo
-   pedido/orden a nivel de datos? Cambia el modelo de datos si es lo
-   segundo.
+8. ✅ **Que un segundo pedido a la misma mesa no aparezca como "pedido
+   nuevo"** — hecho, solo visual (el usuario confirmó que no hacía falta
+   fusionar a nivel de datos): Vender y Pedidos-cocina agrupan por
+   `table_label`, una tarjeta por mesa con los pedidos de esa mesa adentro.
+   Cada `orders` row sigue siendo independiente.
 9. **Que el mesero vea lo que agrega antes de registrar el pedido** — Vender
    ya muestra un carrito (cantidad + total) pegado abajo; falta una vista de
    detalle/confirmación itemizada antes de "Registrar pedido".
-10. **Alerta de descuadre si la caja de ayer no cuadra** — nuevo. Falta
-    definir qué significa "cuadrar" exactamente (¿efectivo+tarjetas
-    contado vs. `ventasHoy` del sistema, que ya se muestra en Caja? ¿contra
-    qué margen de tolerancia?).
+10. ✅ **Alerta de descuadre si la caja de ayer no cuadra** — hecho. Banner
+    rojo en Panel si `|efectivo+tarjetas contado − ventas app| > $1.000`
+    (misma tolerancia que ya usaba Caja para su propio indicador inline).
 11. **Forzar orden de actividades al llegar**: 1° apertura de caja, luego
     inventario diario, con una "2da actividad" definida — nuevo, es una
     restricción de flujo (no dejar hacer X sin haber hecho Y primero). Muy
