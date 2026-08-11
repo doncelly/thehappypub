@@ -20,13 +20,23 @@ type Props = {
   photoUrls: Record<string, string>;
 };
 
+const ALISTAMIENTO_PARTES = [
+  { key: "alistamiento_apertura_caja", title: "1.1 Apertura de caja" },
+  { key: "alistamiento_inventarios_sanidad", title: "1.2 Inventarios y documentos de sanidad (escanear y subir)" },
+  { key: "alistamiento_organizacion", title: "1.3 Organización de los espacios" },
+  { key: "alistamiento_cristaleria", title: "1.4 Limpieza de cristalería" },
+  { key: "alistamiento_actividad_dia", title: "1.5 Actividad del día" },
+] as const;
+
 function buildInitial(entries: Entry[], photoUrls: Record<string, string>): Record<string, SectionState> {
   const byKey: Record<string, SectionState> = {
-    alistamiento: { done: false, areas: {}, hasPhoto: false, photoUrl: null },
     inventario: { done: false, areas: {}, hasPhoto: false, photoUrl: null },
     apertura: { done: false, areas: {}, hasPhoto: false, photoUrl: null },
     cierre: { done: false, areas: {}, hasPhoto: false, photoUrl: null },
   };
+  for (const { key } of ALISTAMIENTO_PARTES) {
+    byKey[key] = { done: false, areas: {}, hasPhoto: false, photoUrl: null };
+  }
   for (const e of entries) {
     byKey[e.section] = { done: e.done, areas: e.areas ?? {}, hasPhoto: e.has_photo, photoUrl: photoUrls[e.section] ?? null };
   }
@@ -44,29 +54,51 @@ export function ChecklistClient({ date, userId, role, entries, photoUrls }: Prop
   }
 
   async function toggleDone(section: string) {
-    const next = !sections[section].done;
+    const prevState = sections[section];
+    const next = !prevState.done;
     setSections((prev) => ({ ...prev, [section]: { ...prev[section], done: next } }));
-    await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, done: next, completed_at: next ? new Date().toISOString() : null });
+    const { error } = await supabase
+      .from("checklist_entries")
+      .upsert({ date, user_id: userId, section, done: next, completed_at: next ? new Date().toISOString() : null });
+    if (error) {
+      setSections((prev) => ({ ...prev, [section]: prevState }));
+      showToast("No se pudo guardar, intenta de nuevo");
+    }
   }
 
   async function toggleItem(section: string, area: string, item: string, checked: boolean) {
-    const nextAreas: NestedAreas = { ...sections[section].areas, [area]: { ...sections[section].areas[area], [item]: checked } };
+    const prevState = sections[section];
+    const nextAreas: NestedAreas = { ...prevState.areas, [area]: { ...prevState.areas[area], [item]: checked } };
     setSections((prev) => ({ ...prev, [section]: { ...prev[section], areas: nextAreas } }));
-    await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, areas: nextAreas });
+    const { error } = await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, areas: nextAreas });
+    if (error) {
+      setSections((prev) => ({ ...prev, [section]: prevState }));
+      showToast("No se pudo guardar, intenta de nuevo");
+    }
   }
 
   async function markAllArea(section: string, area: string, items: string[]) {
-    const nextAreas: NestedAreas = { ...sections[section].areas, [area]: Object.fromEntries(items.map((i) => [i, true])) };
+    const prevState = sections[section];
+    const nextAreas: NestedAreas = { ...prevState.areas, [area]: Object.fromEntries(items.map((i) => [i, true])) };
     setSections((prev) => ({ ...prev, [section]: { ...prev[section], areas: nextAreas } }));
-    await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, areas: nextAreas });
+    const { error } = await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, areas: nextAreas });
+    if (error) {
+      setSections((prev) => ({ ...prev, [section]: prevState }));
+      showToast("No se pudo guardar, intenta de nuevo");
+    }
   }
 
   async function markAllSection(section: string, items: Record<string, string[]>) {
+    const prevState = sections[section];
     const nextAreas: NestedAreas = Object.fromEntries(
       Object.entries(items).map(([area, list]) => [area, Object.fromEntries(list.map((i) => [i, true]))]),
     );
     setSections((prev) => ({ ...prev, [section]: { ...prev[section], areas: nextAreas } }));
-    await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, areas: nextAreas });
+    const { error } = await supabase.from("checklist_entries").upsert({ date, user_id: userId, section, areas: nextAreas });
+    if (error) {
+      setSections((prev) => ({ ...prev, [section]: prevState }));
+      showToast("No se pudo guardar, intenta de nuevo");
+    }
   }
 
   async function uploadPhoto(section: string, file: File | undefined) {
@@ -91,12 +123,19 @@ export function ChecklistClient({ date, userId, role, entries, photoUrls }: Prop
 
   return (
     <div>
-      <SimpleSection
-        title="Alistamiento"
-        state={sections.alistamiento}
-        onToggle={() => toggleDone("alistamiento")}
-        onPhoto={(f) => uploadPhoto("alistamiento", f)}
-      />
+      <Section title="1. Alistamiento del establecimiento">
+        <div className="space-y-2.5">
+          {ALISTAMIENTO_PARTES.map(({ key, title }) => (
+            <SimpleSection
+              key={key}
+              title={title}
+              state={sections[key]}
+              onToggle={() => toggleDone(key)}
+              onPhoto={(f) => uploadPhoto(key, f)}
+            />
+          ))}
+        </div>
+      </Section>
       <SimpleSection
         title="Inventario"
         state={sections.inventario}

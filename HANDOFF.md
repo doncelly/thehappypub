@@ -162,12 +162,18 @@ Pega este archivo completo como primer mensaje. El asistente debe:
   y la sync con Sheets.
 - **Paso 13** — Plantilla semanal de Agenda + PDF de horario semanal
   descargable para todo el equipo (ver arriba).
+- **Paso 14** — Checklist de "Alistamiento" reestructurado en 5 sub-secciones
+  (1.1 a 1.5, ver punto 12 de "Qué falta"), con manejo de error real (toast +
+  revertir estado optimista) en las 4 funciones que faltaban
+  (`toggleDone`/`toggleItem`/`markAllArea`/`markAllSection` en
+  `ChecklistClient.tsx`) — verificado en vivo que ahora sí avisa si el
+  guardado falla, en vez de mostrar "Listo" en falso.
 
 ## Migraciones SQL — MUY IMPORTANTE
 
 `supabase/schema.sql` y `supabase/seed.sql` son la fuente de verdad para
 **instalaciones nuevas**. El proyecto Supabase real del usuario se actualiza
-con patches incrementales en `supabase/patches/` (0001 a 0017, todos
+con patches incrementales en `supabase/patches/` (0001 a 0020, todos
 idempotentes — ver error real #16 sobre qué tan en serio hay que tomarse
 "idempotente"). Archivo combinado:
 
@@ -271,13 +277,23 @@ antes de asumir**, no inventar reglas.
    que el prellenado fuera automático sin botón — también hecho.
 3. ✅ **Meta mensual mínimo $19.000.000** — hecho. `monthly_goal_settings`
    (singleton, solo-jefe), editable en Panel junto a la meta diaria/semanal.
-   Patch 0019.
+   Patch 0019. **Confirmado 11 ago 2026**: el usuario volvió a pedir que
+   esto sea "solo para los administradores" — ya lo es, doblemente: la
+   página `/panel` entera exige `requireRole("jefe")` (nadie más puede ni
+   cargarla) y la tabla `monthly_goal_settings` tiene su propia policy RLS
+   "solo jefe" en `schema.sql`. No hizo falta cambio de código.
 4. ✅ **"Barriles de repuesto" en Inventario** — hecho. Un item qty-mode por
    cada uno de los 8 barriles reales, mismo patrón que "Botellas de
    repuesto" de insumos_coctel/shots. Dato insertado directo en la base
    real (no necesitó patch, solo `seed.sql` actualizado).
 5. **Descartado por el usuario** — mostrar litros aproximados de un barril.
-   Se dejó como qty simple (punto 4) en vez de esto.
+   Se dejó como qty simple (punto 4) en vez de esto. ⚠️ **Contradicción sin
+   resolver**: el 11 ago 2026 el usuario volvió a pedirlo ("si el barril es
+   de tantos litros poner aprox cuanto queda"), en el mismo mensaje que
+   repitió gran parte del backlog viejo. No se implementó — puede ser que
+   simplemente reenvió la lista completa sin revisar qué ya estaba
+   descartado. **Preguntar antes de tocar esto**: ¿de verdad quiere litros
+   aproximados ahora, o el punto 4 (qty simple, ya hecho) es suficiente?
 6. Panel ya tenía `SummaryCard` con Bajo mínimo / En buen nivel /
    Aprovisionado (%) desde antes — no se tocó, no se pidió más detalle.
 7. ✅ **Panel por productos de barra y cocina** — hecho. Nueva sección
@@ -301,13 +317,14 @@ antes de asumir**, no inventar reglas.
     restricción de flujo (no dejar hacer X sin haber hecho Y primero). Muy
     ligado al punto 12 (checklist de alistamiento reestructurado) — probable
     que se resuelvan juntos.
-12. **Checklist de "Alistamiento" reestructurado en sub-secciones**:
-    1.1 Apertura de caja, 1.2 Inventarios y documentos de sanidad (escanear
-    y subir), 1.3 Organización de espacios, 1.4 Limpieza de cristalería,
-    1.5 Actividad del día. Hoy "Alistamiento" en Checklist es un solo
-    toggle Listo/foto — esto lo expande a una checklist real de 5 partes,
-    con subida de documentos (no solo fotos) en 1.2. Afecta
-    `checklist_entries`/`checklist_photos` y `ChecklistClient.tsx`.
+12. ✅ **Checklist de "Alistamiento" reestructurado en sub-secciones** —
+    hecho: 1.1 Apertura de caja, 1.2 Inventarios y documentos de sanidad,
+    1.3 Organización de espacios, 1.4 Limpieza de cristalería, 1.5 Actividad
+    del día, cada una con su propio Listo/foto. Patch 0020. **Pendiente de
+    decisión**: 1.2 quedó como sube-foto (igual que las demás) en vez de
+    subida de documento/PDF aparte — se asumió que fotografiar el documento
+    físico es equivalente práctico a "escanear" para este negocio. Si el
+    usuario quiere subida de PDF real, falta ese trabajo aparte.
 13. **Reportes semanales organizados por año** — hoy el PDF semanal se
     genera bajo demanda para la semana actual/últimos 7 días, no se guarda
     un archivo. Falta: ¿se debe guardar cada semana generada en Storage

@@ -383,7 +383,12 @@ comment on table public.bonuses is
 create table public.checklist_entries (
   date          date not null,
   user_id       uuid not null references public.users(id),
-  section       text not null check (section in ('alistamiento','inventario','apertura','cierre')),
+  section       text not null check (section in (
+    'alistamiento', -- legado, ya no se escribe — reemplazado por los 5 de abajo
+    'inventario','apertura','cierre',
+    'alistamiento_apertura_caja','alistamiento_inventarios_sanidad',
+    'alistamiento_organizacion','alistamiento_cristaleria','alistamiento_actividad_dia'
+  )),
   done          boolean not null default false, -- usado por alistamiento/inventario
   areas         jsonb not null default '{}'::jsonb, -- usado por apertura/cierre: {"Barra": true, ...}
   has_photo     boolean not null default false,
@@ -396,7 +401,12 @@ create table public.checklist_photos (
   id            bigint generated always as identity primary key,
   date          date not null,
   user_id       uuid not null references public.users(id),
-  section       text not null check (section in ('alistamiento','inventario','apertura','cierre')),
+  section       text not null check (section in (
+    'alistamiento',
+    'inventario','apertura','cierre',
+    'alistamiento_apertura_caja','alistamiento_inventarios_sanidad',
+    'alistamiento_organizacion','alistamiento_cristaleria','alistamiento_actividad_dia'
+  )),
   storage_path  text not null, -- objeto en el bucket 'happy-pub-photos', ver storage policies abajo
   uploaded_at   timestamptz not null default now(),
   unique (date, user_id, section)
