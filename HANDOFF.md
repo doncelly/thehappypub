@@ -6,13 +6,26 @@ Migración de `happy_pub_inventario.html` (una sola página HTML, sistema real e
 producción de un bar en Bogotá) a: **Next.js 16 (App Router) + TypeScript +
 Tailwind + Supabase (Postgres/Auth/Realtime/Storage) + Vercel**.
 
-El negocio, los flujos y el catálogo real (171 items de inventario, 76
-productos de menú, 85 líneas de receta) ya estaban validados en el HTML
+El negocio, los flujos y el catálogo real ya estaban validados en el HTML
 original — la migración no rediseña el negocio, solo la arquitectura. Todo el
-catálogo real ya está en `supabase/seed.sql`, extraído verbatim del HTML.
+catálogo real ya está en `supabase/seed.sql`, extraído verbatim del HTML (y
+ampliado desde entonces con productos reales nuevos, ver "Progreso" abajo).
 
-Directorio del proyecto: `/Users/natt/Documents/TheHappyPub`
-No es repo de GitHub remoto (solo git local, sin commits).
+**Estado: en producción y en uso real, con el equipo real usándola a diario.**
+
+- Directorio del proyecto: `/Users/natt/Developer/TheHappyPub` (movido desde
+  `~/Documents/TheHappyPub` — iCloud Drive sincronizaba esa carpeta y
+  revertía `.env.local` a placeholders constantemente; mover el proyecto
+  fuera de Documents lo resolvió de raíz).
+- Repo: `https://github.com/doncelly/thehappypub.git` (rama `main`, push por
+  SSH — la autenticación por token HTTPS nunca funcionó, no vale la pena
+  reintentarla).
+- Deploy: **Vercel, `https://thehappypub.vercel.app`** — auto-deploy en cada
+  push a `main`. Este es el link real que el usuario comparte con su equipo.
+- Verificado de punta a punta contra producción real: login, venta de un
+  producto real (con descuento de inventario correcto), Caja (apertura +
+  cierre), sincronización con Google Sheets real, Pedidos a cocina en vivo,
+  Plantilla semanal de Agenda, PDF de horario semanal.
 
 ## Cómo seguir en el chat nuevo
 
@@ -20,7 +33,12 @@ Pega este archivo completo como primer mensaje. El asistente debe:
 1. Leer `README.md` y este archivo para orientarse.
 2. Revisar `supabase/schema.sql` (fuente de verdad del esquema) antes de asumir
    estructura de tablas.
-3. Preguntar al usuario qué sigue (ver "Qué falta" al final) en vez de asumir.
+3. Revisar la sección **"Qué falta"** al final — ahí está el backlog real
+   pedido por el usuario, con notas de qué ya quedó resuelto y qué necesita
+   una decisión de negocio antes de tocar código. Preguntar antes de asumir
+   en los puntos marcados como ambiguos.
+4. Antes de tocar Bash, confirmar `pwd` es `/Users/natt/Developer/TheHappyPub`
+   (el harness a veces resetea el cwd a la ruta vieja de Documents).
 
 ## Decisiones de arquitectura clave
 
@@ -30,300 +48,301 @@ Pega este archivo completo como primer mensaje. El asistente debe:
   cliente. Al validar, el servidor genera un magic link (admin API) y lo
   "canjea" (`verifyOtp` con `token_hash` — **nunca mandar `email` junto con
   `token_hash`**, GoTrue lo rechaza) para crear una sesión real de Supabase
-  Auth. Ver `src/lib/auth/`.
+  Auth. Ver `src/lib/auth/`. La sesión se refresca en cada request vía
+  `src/proxy.ts` (Next.js 16 renombró "middleware" a "proxy" — buscar por ese
+  nombre, no por `middleware.ts`, que no existe en este proyecto).
 - **Bloqueo por intentos fallidos de PIN**: 5 intentos → bloqueo 5 min
-  (`users.failed_pin_attempts`, `locked_until`). El original no tenía esto
-  (comparaba en cliente); un PIN de 4 dígitos sin límite es fuerza-bruteable en
-  segundos una vez es un endpoint real.
+  (`users.failed_pin_attempts`, `locked_until`).
 - **RLS por dominio de rol**: `mesero` solo ve/escribe categorías de inventario
   con `domain='mesas'`, `cocinero` solo `domain='cocina'`, `jefe` ve todo. Vía
   funciones `current_user_role()`, `is_jefe()`, `user_domain()` (SECURITY
   DEFINER, evitan RLS recursivo).
-- **`pin_hash` nunca viajero al cliente**: RLS por sí sola no basta (controla
+- **`pin_hash` nunca viaja al cliente**: RLS por sí sola no basta (controla
   filas, no columnas) — hay `REVOKE ALL` + `GRANT SELECT` de columnas
   específicas en `users` (sección 16 de `schema.sql`).
-- **Operaciones dinero/inventario → funciones RPC atómicas** (no múltiples
-  writes secuenciales desde el cliente, que no son transaccionales): 
-  `register_order` (Vender: crea pedido + descuenta inventario + libera mesa +
-  activity_log), `void_order` (Vender: anula un pedido mal registrado —
-  reverso exacto de `register_order`, restaura el inventario según la receta;
-  jefe anula cualquiera, mesero solo los suyos, sin límite de tiempo),
-  `register_delivery` y `mark_purchase_order_received` (Recibidos),
-  `register_loss` (Pérdidas). Todas SECURITY DEFINER, todas repiten el chequeo
-  de dominio/propiedad manualmente porque bypasean RLS.
-- **Triggers en `item_status`**: `set_item_status_audit` (pone `updated_by`/
-  `updated_at` server-side, el cliente nunca los manda), `set_stock_history`
-  (upsert automático a `stock_history` en cada cambio de qty — el original
-  repetía esto en 4 sitios distintos del cliente), `log_item_status_activity`
-  (alimenta el feed de actividad).
-- **`activity_log`**: nuevo respecto al original (que usaba `pushActivity` en
-  un array del blob JSON). Nadie puede insertar directo — solo triggers
-  SECURITY DEFINER. Lectura solo-jefe.
-- **`attendance.work_type`**: extensión NUEVA (pedida por el usuario, no
-  estaba en el original). Un jefe puede cubrir turno de **mesero** y de
-  **administración** el mismo día — cada uno con su propia tarifa
-  (`hourly_rates.administracion_flat`, que el usuario debe configurar en
-  Personal, quedó en $0 por defecto). Unique constraint es
-  `(user_id, date, work_type)`, no `(user_id, date)`. Mesero/cocinero tienen
-  `work_type` fijo = su subrol; jefe elige en Mi día. Geocerca automática
-  **solo** para mesero/cocinero (para jefe es ambiguo qué turno detectar).
+- **Operaciones dinero/inventario → funciones RPC atómicas**: `register_order`,
+  `void_order`, `register_delivery`, `mark_purchase_order_received`,
+  `register_loss`, `ack_order_kitchen` (cocina marca pedido recibido). Todas
+  SECURITY DEFINER, todas repiten el chequeo de dominio/propiedad manualmente
+  porque bypasean RLS.
+- **Zona horaria — Bogotá, no UTC**: Vercel corre los Server Components en
+  UTC; Bogotá es UTC-5 fijo (Colombia no tiene horario de verano). Sin
+  ajustar esto, "hoy" cambiaba a las 7pm hora Bogotá (medianoche UTC) — ver
+  error real #15 abajo. `src/lib/format.ts` tiene `todayISO()` (hoy en
+  Bogotá), `bogotaDayRangeUTC(date)` (rango UTC real de un día de Bogotá,
+  para filtrar `created_at` con `.gte()/.lte()`) y `bogotaDateOf(ts)` (a qué
+  día de Bogotá pertenece un timestamp UTC, para agrupar ventas por día).
+  **Cualquier código nuevo que filtre o agrupe por fecha una columna
+  timestamptz (orders.created_at, etc.) DEBE usar estos helpers**, nunca
+  `${date}T00:00:00`/`T23:59:59` a secas ni `ts.slice(0, 10)`.
+- **Triggers en `item_status`**: `set_item_status_audit`, `set_stock_history`,
+  `log_item_status_activity`.
+- **`activity_log`**: nadie puede insertar directo — solo triggers SECURITY
+  DEFINER. Lectura solo-jefe.
+- **`attendance.work_type`**: un jefe puede cubrir turno de **mesero** y de
+  **administración** el mismo día — cada uno con su propia tarifa. Unique
+  constraint es `(user_id, date, work_type)`, no `(user_id, date)`.
 - **Regla de pureza de React 19 / eslint-hooks**: `Date.now()` / `new Date()`
   sin argumentos / `crypto.randomUUID()` sueltos en el cuerpo de un componente
-  (server o cliente, incluso dentro de funciones anidadas como handlers) los
-  marca como error. Patrón usado en todo el código: envolver en una función
-  con nombre en un módulo aparte (`lib/format.ts`: `minutesAgoISO()`,
-  `lastNDays()`; `lib/new-id.ts`: `newId()`) o, si el valor se necesita
-  reactivo en el cliente, un hook `useNowTick()` (`lib/hooks/use-now-tick.ts`)
-  que lo mete a un estado vía `useEffect`+`setTimeout(fn,0)`+`setInterval`
-  (nunca `setState` síncrono directo en el cuerpo del efecto, esa es OTRA
-  regla que también rompe el lint).
-- **Formateo de fecha/hora sin `toLocaleDateString`/`toLocaleString`**: esas
-  dependen de los datos ICU del entorno (Node servidor vs. navegador) y
-  pueden diferir en detalles ("ago." vs "ago", "p.m." vs "p. m.") — eso rompe
-  la hidratación de Server Components. Todo el formateo es manual con arrays
-  de meses/días en español (`lib/format.ts`).
-- **PostgREST embeds anidados son frágiles**: se abandonó el patrón
-  `items → item_status → users` (doble anidado) porque causaba que items
-  completos desaparecieran de los resultados sin error visible. Patrón actual:
-  fetch `usersById` aparte y resolver nombres en el cliente/servidor a mano.
-  `normalizeStatus()` en `lib/inventory-status.ts` además normaliza
-  defensivamente por si PostgREST devuelve el embed como objeto o como array.
+  los marca como error. Envolver en una función con nombre en un módulo
+  aparte, o `useNowTick()` (`lib/hooks/use-now-tick.ts`) si se necesita
+  reactivo en cliente.
+- **Formateo de fecha/hora sin `toLocaleDateString`/`toLocaleString`**: rompe
+  hidratación entre servidor y navegador. Todo el formateo es manual
+  (`lib/format.ts`).
+- **PostgREST embeds anidados son frágiles**: se resuelven nombres vía
+  `usersById` aparte, no embeds de dos niveles.
+- **Flexbox: un div `flex flex-wrap` con texto suelto como hijo NO se
+  encoge** (min-width:auto en flex items) — si un contenedor flex tiene texto
+  no controlado al lado de botones de ancho fijo, **apilar en dos filas**
+  (texto arriba, botones/valor abajo) en vez de pelear con `min-w-0`. Pasó
+  tres veces: Personal → Equipo, Caja → filas de Compras/Auxilios.
+- **`<input type="time">`/`type="date"` en iOS Safari ignora el `width` del
+  CSS** — se renderiza a su ancho "nativo del sistema" sin importar la caja
+  que le des, saliéndose del contenedor aunque ya esté solo en su propia
+  fila. Fix: `appearance-none` en el input (quita el estilo nativo de Safari
+  sin quitar el selector de hora/fecha al tocar el campo) + `overflow-hidden`
+  en el contenedor como respaldo visual. Ver error real #14 abajo — esto NO
+  es lo mismo que el bug de flexbox de arriba, son dos causas distintas del
+  mismo síntoma ("se sale del recuadro en el celular").
+- **Plantilla semanal de Agenda** (`weekday_templates`,
+  `shift_schedule_templates`, `default_weekday_tasks.transport_aid`): valores
+  por defecto de "Operación del día" y horario de turnos por día de semana
+  (0=domingo…6=sábado). Si el día no tiene `agenda_days` guardado aún, el
+  formulario de Agenda arranca prellenado con la plantilla (no hay botón
+  "aplicar" — es automático vía el `useState` inicial, con `key={date}` en
+  `AgendaClient` para que se reinicie bien al cambiar de fecha). La persona
+  que cubre cada slot NO se guarda en la plantilla (rota semana a semana) —
+  solo un `default_person` sugerido, editable, que se usa como sugerencia al
+  elegir el slot en "Agregar turno". Editable en Agenda → sección "Plantilla
+  semanal", al final de la página.
+- **PDF de horario semanal** (`src/app/(staff)/agenda/schedule-pdf.ts`):
+  genera un PDF con los turnos REALES ya asignados esa semana (no la
+  plantilla) + ventas/cumplimiento de meta por día (solo hasta hoy), como
+  tabla real (no solo texto). Se sube a Storage
+  (`agenda-schedules/{monday}.pdf`, bucket `happy-pub-photos`, upsert) y
+  jefe/mesero/cocinero lo pueden descargar desde Mi día vía URL firmada. Solo
+  jefe puede generarlo (botón en Agenda).
+- **Pedidos a cocina en vivo** (`src/app/(staff)/pedidos/`): reemplaza la
+  comanda de papel. Cuando un mesero registra un pedido en Vender, aparece al
+  instante (Realtime) en la pestaña "Pedidos" de jefe/cocinero, con sonido de
+  alerta (Web Audio API sintetizado, no un archivo de audio — necesita un tap
+  del usuario para "activar sonido" primero, los navegadores bloquean audio
+  sin gesto). `orders.kitchen_ack_at`/`kitchen_ack_by` + RPC
+  `ack_order_kitchen` para marcar recibido.
 
 ## Progreso — Pasos completados
 
-- **Paso 1** — Estructura Next.js (App Router, TS, Tailwind). Paleta real
-  (navy `#30418A`, gold `#C68D17`) en `tailwind.config.ts`. Logo real
-  (`public/brand/logo.png`, con canal alpha) y fuente real (Cheddar Gothic
-  Serif, `public/fonts/CheddarGothicSerif.ttf`) ya instalados, componente
-  `<Logo>` reutilizable.
-- **Paso 2** — `supabase/schema.sql` (todas las tablas + RLS) y
-  `supabase/seed.sql` (catálogo real completo). Ejecutado por el usuario.
-- **Paso 3** — Auth completo (ver arriba).
-- **Paso 4** — **Todos los módulos de navegación migrados**: Inventario,
-  Panel, Agenda, Caja (pestaña propia, jefe+mesero), Vender, Checklist
-  (desplegable por área con ítems reales del documento "Check List Sala
-  Terraza Apertura Cierre"), Mi día, Recibidos, Pérdidas, Vencimientos,
-  Galería, Personal. Todos con Realtime donde aplica (item_status, orders,
-  attendance, table_locks, activity_log).
-- **Reportes** — PDF semanal (Panel, jefe), PDF personal (Mi día, cualquier
-  rol), CSV de cierres de caja (Panel), y **subida del CSV a Google Drive**
-  (botón nuevo, vía cuenta de servicio — código listo, configuración pendiente
-  del lado del usuario, ver `GOOGLE_DRIVE_SETUP.md`).
+- **Paso 1** — Estructura Next.js, paleta/logo/fuente real.
+- **Paso 2** — `supabase/schema.sql` + `supabase/seed.sql` (catálogo real).
+- **Paso 3** — Auth completo.
+- **Paso 4** — Todos los módulos de navegación migrados, con Realtime.
+- **Paso 5** — Reportes PDF (semanal y personal) con diseño de marca.
+- **Paso 6** — Sincronización con Google Sheets.
+- **Paso 7** — Deploy público (GitHub + Vercel).
+- **Paso 8** — Revisión completa de responsive/mobile (ver errores #12-14).
+- **Paso 9** — Buscador de productos en Vender (por nombre, ignora
+  tildes/mayúsculas, across todas las categorías).
+- **Paso 10** — Catálogo ampliado con productos reales nuevos: Corona/Andina
+  Light/Heineken ahora con lata Y botella (antes solo tenían una
+  presentación, y en el caso de Andina Light/Heineken la que existía en
+  realidad era la lata aunque el nombre no lo decía), Corona Cero (lata y
+  botella, no existía), Poker (lata). Mismo precio de venta entre
+  presentaciones de un mismo producto, confirmado con el usuario.
+- **Paso 11** — Pantalla "Pedidos" para cocina en vivo (ver arriba).
+- **Paso 12** — Bug de zona horaria corregido de raíz (ver error real #15) —
+  afectaba Vender, Panel, Caja, Agenda, Mi día, reportes de ventas/comisiones
+  y la sync con Sheets.
+- **Paso 13** — Plantilla semanal de Agenda + PDF de horario semanal
+  descargable para todo el equipo (ver arriba).
 
 ## Migraciones SQL — MUY IMPORTANTE
 
 `supabase/schema.sql` y `supabase/seed.sql` son la fuente de verdad para
-**instalaciones nuevas**. El usuario ya tiene un proyecto Supabase corriendo
-que se fue actualizando con patches incrementales en `supabase/patches/`
-(0001 a 0011). **Todos los patches ya son idempotentes** (seguros de correr
-más de una vez — cada uno revisa si ya existe antes de crear). Hay un archivo
-combinado:
+**instalaciones nuevas**. El proyecto Supabase real del usuario se actualiza
+con patches incrementales en `supabase/patches/` (0001 a 0017, todos
+idempotentes — ver error real #16 sobre qué tan en serio hay que tomarse
+"idempotente"). Archivo combinado:
 
 ```
-supabase/patches/CATCHUP_0001_0011.sql
+supabase/patches/CATCHUP.sql
 ```
 
-que junta los 10 en uno solo — instrucción estándar para el usuario: "corre
-este archivo si tienes dudas de qué patches te faltan". **Cualquier cambio de
-schema nuevo que se agregue de acá en adelante debe reflejarse tanto en
-`schema.sql` (para instalaciones nuevas) como en un patch numerado nuevo
-(0011, etc.) que también debe agregarse al CATCHUP combinado o mencionarse
-aparte** — el usuario se ha confundido varias veces con patches sueltos, así
-que conviene ser explícito y ofrecer recrear el CATCHUP combinado cuando se
-agregue un patch nuevo.
+**Este archivo SIEMPRE se llama `CATCHUP.sql`** (nombre fijo — antes se
+llamaba `CATCHUP_0001_00NN.sql` y se renombraba con cada patch nuevo, lo que
+en GitHub aparecía como "movido/eliminado" y confundía al usuario, ver error
+real #17). Instrucción estándar: "corre este archivo si tienes dudas de qué
+patches te faltan". **Cualquier cambio de schema nuevo debe reflejarse tanto
+en `schema.sql` como en un patch numerado nuevo**, y regenerar
+`CATCHUP.sql` (mismo nombre, contenido nuevo) concatenando todos los patches
+en orden.
+
+⚠️ **Al escribir un patch nuevo que hace `insert`**: si la tabla no tiene una
+key natural para `on conflict`, agregar la restricción única **dentro del
+mismo patch** (con un `do $$ ... if not exists ... $$` sobre `pg_constraint`,
+no asumir que un patch posterior la va a agregar) y usar
+`on conflict (...) do nothing`. Motivo real: el patch 0013 insertaba sin
+protección, un patch posterior (0016) le agregó la restricción única para
+arreglar duplicados ya existentes — pero como el INSERT de 0013 seguía sin
+`on conflict`, la próxima vez que alguien corrió el CATCHUP completo desde
+cero, el INSERT de 0013 chocó contra la restricción y **abortó toda la
+transacción**, incluyendo los patches que venían después en el mismo
+archivo (0017). Ver error real #16.
 
 ## Errores reales que costó resolver (para no repetirlos)
 
-1. **Borré `.env.local` del usuario por accidente** dos veces, corriendo
-   `cp .env.local.example .env.local && npm run build && rm .env.local` para
-   probar builds sin credenciales reales. Arreglado: **nunca tocar
-   `.env.local`** — si hace falta compilar sin credenciales, pasar env vars
-   inline al comando (`VAR=x npm run build`), nunca crear/borrar el archivo
-   real.
-2. **El usuario pegó credenciales reales en `.env.local.example`** (el
-   template, no gitignorado) **tres veces** en la conversación — cada vez hubo
-   que mover los valores a `.env.local` (sí gitignorado) y restaurar el
-   `.example` a placeholders. Vale la pena recordarle al usuario la diferencia
-   entre los dos archivos si vuelve a pasar.
-3. **Verificación de patches**: el usuario reportó el mismo error
-   (`activity_log` no existe, `attendance.work_type` no existe) más de una vez
-   porque los patches no eran idempotentes y algunos corrieron a medias. Ya
-   resuelto (ver arriba), pero conviene confirmar explícitamente con el
-   usuario que corrió el CATCHUP y que los errores desaparecieron antes de
-   seguir construyendo sobre esas tablas.
-4. **`verifyOtp` con `token_hash` + `email` a la vez** → GoTrue lo rechaza
-   ("Only the token_hash and type should be provided"). Solo mandar
-   `token_hash` + `type`.
-5. **Vulnerabilidades de dependencias**: Next.js quedó pineado en 14.2.16
-   (vulnerable) al principio — se subió a 16.3.0 + React 19 + codemod
-   `middleware.ts`→`proxy.ts`. `jspdf@2.5.2` traía `dompurify` vulnerable →
-   subido a `jspdf@4.2.1`. `google-auth-library@9` traía `uuid` vulnerable vía
-   `gaxios` → subido a `^11.0.0`. **Siempre correr `npm audit` después de
-   instalar una dependencia nueva.**
-6. **RPCs que hacen INSERT con un valor placeholder y luego UPDATE en la misma
-   transacción (patrón usado en `register_order`: inserta `orders` con
-   `total=0`, descuenta inventario, y al final hace `update orders set
-   total=...`) necesitan que el cliente escuche tanto `INSERT` como `UPDATE`
-   por `postgres_changes`** — si solo se suscribe a `INSERT` (como pasaba en
-   `VenderClient.tsx` y `PanelClient.tsx`), la UI en vivo se queda pegada en
-   el valor placeholder hasta que alguien recarga la página, aunque la base de
-   datos ya tenga el valor correcto. Revisar cualquier otra RPC nueva que siga
-   este patrón (insert-luego-update) y agregar el listener de `UPDATE` correspondiente.
+1. **Borré `.env.local` del usuario por accidente** probando builds sin
+   credenciales. Arreglado: nunca tocar `.env.local`.
+2. **Credenciales reales pegadas en `.env.local.example`** (sí va a git) —
+   revisar explícitamente antes de cualquier commit/push.
+3. **Patches no idempotentes** causaron que el usuario reportara el mismo
+   error más de una vez.
+4. **`verifyOtp` con `token_hash` + `email` a la vez** → GoTrue lo rechaza.
+5. **Vulnerabilidades de dependencias**: correr `npm audit` tras instalar algo.
+6. **RPCs que hacen INSERT-luego-UPDATE en la misma transacción** necesitan
+   que el cliente escuche tanto `INSERT` como `UPDATE` por `postgres_changes`.
+7. **Autenticación por GitHub PAT nunca funcionó** — se usó SSH key.
+8. **Un PAT de GitHub real fue pegado en el chat por el usuario** — nunca se
+   usó, se le dijo que lo revocara.
+9. **iCloud Drive revertía `.env.local`** — se movió el proyecto fuera de
+   `~/Documents`.
+10. **Google Sheets API rechaza archivos `.xlsx`** — hubo que convertir a
+    Google Sheets nativo, lo que cambió el spreadsheet ID.
+11. **Prueba en vivo pisó datos reales de Sheets** — lección: fechas
+    claramente ficticias para cualquier prueba, nunca la fecha real.
+12. **`mcp__Claude_Browser__computer` es poco confiable** — usar
+    `javascript_tool` cuando el click directo falla dos veces seguidas.
+13. **"No se guarda en el excel al cerrar caja"** era realmente errores de
+    Supabase silenciados sin toast — arreglado revisando `{error}` en cada
+    guardado de Caja.
+14. **Overflow de inputs en mobile — TRES causas distintas del mismo
+    síntoma**: (a) `min-w-0` faltante en contenedores flex (primera ronda);
+    (b) texto suelto en flex-wrap que no se encoge, ej. Personal → Equipo,
+    Caja → filas de Compras/Auxilios (segunda y tercera ronda, ver nota de
+    flexbox arriba); (c) `<input type="time">`/`type="date"` en iOS Safari
+    ignora el width del CSS por completo — ninguna de las dos primeras
+    causas lo arregla, hace falta `appearance-none` (ver nota arriba).
+    Verificar SIEMPRE en un dispositivo/viewport real (375px) después de
+    "arreglarlo" — las tres rondas pasaron porque el fix anterior no era la
+    causa real, solo una causa parecida.
+15. **Bug de zona horaria: pedidos "desaparecían" después de las 7pm** — el
+    servidor calcula "hoy" en UTC; medianoche UTC son las 7pm en Bogotá.
+    Cualquier pedido registrado después de esa hora quedaba fechado "mañana"
+    en `created_at`. Al recargar Vender (o cualquier vista con filtro "de
+    hoy"), la consulta ya no incluía los pedidos de temprano en la noche —
+    parecían borrados, aunque seguían intactos en la base (confirmado
+    revisando `activity_log`: ningún pedido real fue anulado). Afectaba TODA
+    la app (Vender, Panel, Caja, Agenda, Mi día, reportes, sync con Sheets).
+    Se corrigió en la raíz (`lib/format.ts`, ver "Decisiones de
+    arquitectura"), no parche por parche. Lección: cualquier bug de "algo
+    desapareció"/"algo no cuadra" cerca de la noche, sospechar de zona
+    horaria primero.
+16. **Patch no idempotente + CATCHUP como una sola transacción = patches
+    posteriores silenciosamente no aplicados**: ver la nota en "Migraciones
+    SQL" arriba. Lección clave: si un patch falla a mitad del CATCHUP, TODO
+    lo que viene después en el mismo archivo también falla (rollback de
+    transacción), aunque el error solo mencione el patch que falló. Después
+    de cualquier fix a un patch, hay que verificar en vivo (cuenta de prueba
+    real, no solo la service role key que bypasea RLS) que el problema
+    ORIGINAL de verdad se resolvió, no asumir que arreglar el error visible
+    fue suficiente.
+17. **Renombrar el archivo CATCHUP combinado con cada patch nuevo confundía
+    al usuario** ("me sale eliminado" en GitHub) — se resolvió dándole un
+    nombre fijo (`CATCHUP.sql`) que nunca cambia, solo su contenido.
 
-## Qué falta (pendiente al momento de este resumen)
+## Qué falta — backlog real pedido por el usuario (11 ago 2026)
 
-1. ✅ **Confirmado con el usuario** — ya corrió `CATCHUP_0001_0010.sql` (ahora
-   `CATCHUP_0001_0011.sql` — falta correr el patch 0011 nuevo, ver abajo), sin
-   errores de `activity_log`/`attendance.work_type` en consola.
-2. **Google Drive → rediseñado por completo a Google Sheets** (el usuario en
-   realidad ya lleva los cierres a mano en una hoja de cálculo real —
-   "22. Caja Aper-Cierre 2026.xlsx" — con **una pestaña por fecha** (formato
-   `DD/MM/YYYY`, ej. "07/08/2026"), no un CSV nuevo cada vez. Se reemplazó
-   `src/lib/google-drive.ts` (subía un CSV nuevo a una carpeta en cada clic,
-   nunca actualizaba nada) por `src/lib/google-sheets.ts` +
-   `src/app/api/drive/sync-caja-sheet/route.ts`: el botón ahora se llama
-   **"Actualizar hoja de cierres en Drive"** y escribe directo en la pestaña
-   de la fecha (creándola si no existe, duplicando la pestaña plantilla
-   `Copia de COPIA BASE` — así es como el jefe la crea a mano). Detalles:
-   - Mapeo completo de celdas en `sync-caja-sheet/route.ts` (B7-B28),
-     confirmado campo por campo mirando la hoja real del usuario.
-   - Las tablas "Detalle de compras desde remanente" y "Detalle de auxilios
-     de transporte" (columnas E-G) se ubican **buscando el texto del
-     encabezado**, no por número de fila fijo — más resistente si la
-     plantilla cambia de alto.
-   - **Sin equivalente en la app**, se dejan intactos: "META VENTAS",
-     "NUEVOS SEGUIDORES", y toda la sección "SUMA DE FACTURAS
-     EFECTIVO/TARJETAS" (desglose factura por factura, más detallado de lo
-     que la app registra).
-   - La hoja del jefe cruza medianoche (abre un día, cierra al siguiente) pero
-     `cash_register` solo tiene una fecha — la fecha de cierre se calcula
-     como fecha+1 si `close_time < open_time`, si no, la misma fecha.
-   - Nuevo scope de Google (`spreadsheets` en vez de `drive.file`) y nueva env
-     var `GOOGLE_CIERRES_SHEET_ID` (reemplaza `GOOGLE_DRIVE_FOLDER_ID`) — ver
-     `GOOGLE_DRIVE_SETUP.md`, reescrito de cero para este flujo.
-   - ✅ **Verificado en vivo, de punta a punta, contra Google real** (auth,
-     detección de la pestaña "07/08/2026" sin duplicarla, ubicación dinámica
-     correcta de "Detalle de compras desde remanente" en fila 15 y "Detalle de
-     auxilios de transporte" en fila 23, escritura de las 23 celdas). El
-     archivo original del usuario era un `.xlsx` en Drive — la API de Sheets
-     **no puede escribir sobre archivos Office**, tocó convertirlo a Sheets
-     nativo (Archivo → Guardar como Hojas de cálculo de Google), lo que generó
-     un `GOOGLE_CIERRES_SHEET_ID` **nuevo** (`1qqh7fPUR...`, no el ID del
-     `.xlsx` original) — y ese archivo nuevo hubo que compartirlo de nuevo con
-     la cuenta de servicio (los permisos no se heredan al convertir).
-   - ✅ **Bug real encontrado y arreglado antes de que el usuario lo viera**:
-     el jefe no siempre le pone el cero al día al duplicar la pestaña a mano
-     ("6/08/2026" en vez de "06/08/2026") — sin manejarlo, la app habría
-     creado una pestaña duplicada en vez de actualizar la existente.
-     `ensureDateTab` ahora prueba ambas variantes de nombre antes de crear.
-   - ⚠️ **Incidente real durante la prueba**: la verificación se corrió contra
-     la fecha de HOY (`2026-08-07`), que ya era la pestaña real en uso del
-     usuario con datos reales cargados (no una de prueba) — la escritura de
-     prueba sobreescribió una fila real de "Detalle de compras" y las celdas
-     de cierre con valores ficticios. El usuario restauró la versión anterior
-     desde el historial de versiones de Google Sheets (Archivo → Historial de
-     versiones) y confirmó que quedó bien. Los datos de prueba correspondientes
-     en Supabase (`cash_register` de esa fecha, filas de
-     `cash_register_purchases`/`cash_register_transport_aid`) ya se limpiaron.
-     **Lección para la próxima prueba de esta función**: nunca probar contra
-     la fecha de hoy real — usar una fecha claramente ficticia.
-   - ✅ **`.env.local` real ya tiene las credenciales correctas** — costó dos
-     rondas: (1) el usuario había corregido la key en su archivo de respaldo
-     `.env.local.txt`, no en `.env.local` real (se copiaron las 3 líneas
-     correctas al archivo real); (2) la key copiada en el respaldo le faltaban
-     las líneas `-----BEGIN/END PRIVATE KEY-----` (solo tenía el cuerpo en
-     base64) — reparada y verificada como RSA PEM válido con
-     `crypto.createPrivateKey()`, y la autenticación contra Google confirmada
-     de verdad (no solo el formato). Además hubo que habilitar **Google
-     Sheets API** (estaba solo Drive API) en Google Cloud.
-   - ⚠️ **`.env.local.example` (el archivo que SÍ va a git) tuvo credenciales
-     reales filtradas una cuarta vez** (email, key vieja, folder ID) —
-     restaurado a placeholders. Recordarle al usuario la diferencia entre
-     `.env.local` (real, gitignorado) y `.env.local.example` (plantilla,
-     nunca debe tener valores reales) si vuelve a pasar.
-   - Servidor de desarrollo reiniciado para recoger las env vars nuevas —
-     pendiente que el usuario pruebe el botón real "Actualizar hoja de
-     cierres en Drive" desde la app (todo lo demás ya se probó por fuera).
-3. **Prueba de punta a punta — en curso, dos bugs reales encontrados y
-   arreglados, uno sin verificar por falla de herramienta**:
-   - ✅ **Bug de hidratación en Personal** (`PersonalClient.tsx`, `QrCard`):
-     `setOrigin(window.location.origin)` se llamaba directo en el cuerpo del
-     render en vez de en un `useEffect` — mismatch servidor/cliente en el QR
-     de calificación. Arreglado con el patrón `setTimeout(fn, 0)` que ya usa
-     `useNowTick`.
-   - ✅ **Bug de realtime en Vender y Panel** (`VenderClient.tsx`,
-     `PanelClient.tsx`): `register_order` inserta el pedido con `total=0` y lo
-     actualiza *después* en la misma transacción — pero el cliente solo
-     escuchaba `INSERT` en `orders`, nunca `UPDATE`, así que el mesero veía
-     "$0" en el pedido recién registrado hasta recargar. Arreglado agregando
-     el listener de `UPDATE` en ambos archivos (confirmado con logout/login:
-     el total en base de datos siempre fue correcto, solo la vista en vivo
-     estaba mal).
-   - ✅ **Verificado manualmente**: abrir caja (apertura persiste), vender 1
-     Chori Pan en mesa T1 (inventario de Chorizo/Pan para perro/Papas
-     francesas descontó exactamente según la receta: 10→9, 10→9, 500→350),
-     `ventasHoy` en Caja mostró correctamente $28.000.
-   - ⬜ **Sin verificar**: guardar el cierre de caja (botón "Guardar cierre de
-     caja") — a mitad de la prueba el navegador de control (Claude Browser)
-     dejó de registrar clics de forma confiable (scrolls con timeout, clics
-     que no llegaban al DOM, foco saltando al primer elemento tabulable de la
-     página). No parece un bug de la app — el mismo botón sí guardó
-     correctamente la apertura minutos antes — pero no se pudo confirmar el
-     guardado del cierre. Recomendado: probar manualmente el botón "Guardar
-     cierre de caja" con datos reales antes de dar el flujo por cerrado.
-   - ⬜ Quedó un dato de prueba sin limpiar en Inventario → Cocina: **"Cebolla
-     roja" quedó en 10 g** (debería estar en 0) por la misma falla del
-     navegador de control al intentar corregirlo. Ajustar manualmente desde
-     Inventario cuando se pueda.
-   - Falta aún: generar y revisar el PDF/CSV de reportes.
-4. **`npm run supabase:types`** nunca se corrió — `src/lib/types/database.types.ts`
-   sigue siendo el placeholder `export type Database = any;`. Todo el código
-   usa `SupabaseClient<any>` explícito como workaround. Generar los tipos
-   reales sería una mejora de calidad (no urgente, todo compila y funciona).
-5. Cosas que el usuario mencionó y quedaron **fuera de alcance a propósito**:
-   nada pendiente identificado más allá de lo anterior — todos los módulos del
-   nav original están migrados.
-6. **Falta correr `supabase/patches/0011_void_order.sql`** (o el CATCHUP
-   regenerado `CATCHUP_0001_0011.sql`) en el proyecto Supabase real del
-   usuario — agrega la función `void_order` (anular pedido, ver más abajo).
-   Sin esto el botón "Anular" en Vender va a fallar con "function
-   public.void_order does not exist".
-7. ✅ **Anular pedido (Vender)**: el usuario pidió poder borrar un pedido mal
-   registrado. Como `register_order` ya descuenta inventario automáticamente,
-   un simple `.delete()` habría dejado el stock mal — se creó `void_order`
-   (RPC, mismo patrón atómico que `register_order`/`register_loss`): restaura
-   `item_status.qty` según la receta del pedido, registra actividad, y borra
-   el pedido (`order_items` en cascada). Decisión confirmada con el usuario:
-   **jefe puede anular cualquier pedido; mesero solo los que él mismo
-   registró; sin límite de tiempo**. Botón "Anular pedido" ya agregado en la
-   lista "Pedidos de hoy" de `VenderClient.tsx` (con confirmación antes de
-   ejecutar) — falta correr el patch 0011 (punto 6) para que exista la
-   función en la base real.
-8. ✅ **Fuentes no cargaban en toda la app** (reportado como "se ve extraña la
-   plataforma", "botones desalineados", "textos feos" en todas las
-   pestañas). Causa real: `globals.css` solo tenía `@font-face` para Cheddar
-   Gothic Serif (el logo) — `font-body` (IBM Plex Sans, el texto de TODA la
-   página), `font-accent` (Bebas Neue, títulos de sección) y `font-mono`
-   nunca se cargaban, así que el navegador caía al sans-serif genérico del
-   sistema, con métricas distintas a las que se usó para ajustar
-   paddings/alturas de botones y pills — de ahí el desalineado. Arreglado
-   cargando las 3 con `next/font/google` en `layout.tsx` (variables CSS
-   `--font-body`/`--font-accent`/`--font-mono`) y apuntando `tailwind.config.ts`
-   a esas variables en vez de a nombres de fuente que nunca existían.
-   Confirmado con `getComputedStyle` en el navegador — antes resolvía a
-   sans-serif del sistema, ahora a IBM Plex Sans real.
-9. ✅ **Reportes PDF sin diseño de marca**: el usuario pidió logo, colores y
-   fuentes reales en los PDFs (antes: texto plano negro, sin logo, un color
-   "dorado" que ni siquiera era el gold real de la marca). Reescrito
-   `src/lib/pdf.ts` — `createReportDoc(title)` ahora es async, dibuja una
-   franja navy con el logo (`/brand/logo.png`) y el título en Cheddar Gothic
-   Serif (fuente embebida en el PDF vía `doc.addFileToVFS`/`addFont`, cae a
-   Helvetica bold si no carga), repetida en cada página con numeración de
-   página, colores de marca reales (`BRAND_NAVY #30418A`, `BRAND_GOLD
-   #C68D17`, tomados de `tailwind.config.ts`), y soporte de negrita en
-   `line()` para los títulos de sección. Aplicado en `reports.ts` (PDF
-   semanal) y `personal-report.ts` (Mi reporte). Sin probar visualmente el
-   PDF final generado (requiere login).
+El usuario mandó esta lista completa en un solo mensaje. Algunas cosas YA
+quedaron resueltas en esta misma sesión (marcadas ✅); el resto necesita
+trabajo nuevo. Varias implican decisiones de negocio reales — **preguntar
+antes de asumir**, no inventar reglas.
+
+1. ✅ **"Desaparecieron pedidos..."** — era el bug de zona horaria (#15
+   arriba), ya corregido en la raíz.
+2. ✅ **Plantilla semanal para Agenda** (días normales vs. excepción) — ya
+   construida (ver "Decisiones de arquitectura"). El usuario después pidió
+   que el prellenado fuera automático sin botón — también hecho.
+3. **Meta mensual mínimo $19.000.000, "para no estar en rojos", solo
+   visible para administradores** — nuevo. Falta: dónde mostrarlo (¿Panel?),
+   si se calcula sobre ventas del mes calendario o algo distinto, si hay que
+   guardar el valor en una tabla (editable) o puede ir fijo por ahora.
+4. **Agregar "barriles de repuesto" en Inventario** — nuevo. Falta: en qué
+   categoría (¿la misma `barra` que ya tiene barriles, o una nueva?), qué
+   items exactos (nombres reales de los barriles de repuesto).
+5. **Para barriles medidos en litros, mostrar aprox. cuánto queda** — hoy
+   `items.mode='gauge'` para barriles solo tiene niveles discretos
+   (Completo/3-4/Mitad/1-4/Agotado), no litros. Nuevo modo o campo adicional.
+   Falta: ¿cuántos litros tiene un barril lleno (por tipo de barril)? ¿se
+   infiere del nivel discreto o se ingresa un número aparte?
+6. **Panel: total de productos con % de lo que hay vs. falta** — Panel ya
+   tiene `SummaryCard` con Bajo mínimo / En buen nivel / Aprovisionado (%) —
+   revisar si esto ya cubre el pedido o si quieren algo más granular.
+7. **Panel por productos de barra y cocina** (para saber qué hay en cada
+   área) — nuevo, filtrar Panel/Inventario por domain.
+8. **Que un segundo pedido a la misma mesa no aparezca como "pedido nuevo"**
+   — hoy cada `register_order` crea una fila nueva en `orders`; Vender y
+   Pedidos-cocina los listan todos por separado. Falta decidir: ¿se deben
+   agrupar visualmente por mesa en el mismo turno, o fusionar en un solo
+   pedido/orden a nivel de datos? Cambia el modelo de datos si es lo
+   segundo.
+9. **Que el mesero vea lo que agrega antes de registrar el pedido** — Vender
+   ya muestra un carrito (cantidad + total) pegado abajo; falta una vista de
+   detalle/confirmación itemizada antes de "Registrar pedido".
+10. **Alerta de descuadre si la caja de ayer no cuadra** — nuevo. Falta
+    definir qué significa "cuadrar" exactamente (¿efectivo+tarjetas
+    contado vs. `ventasHoy` del sistema, que ya se muestra en Caja? ¿contra
+    qué margen de tolerancia?).
+11. **Forzar orden de actividades al llegar**: 1° apertura de caja, luego
+    inventario diario, con una "2da actividad" definida — nuevo, es una
+    restricción de flujo (no dejar hacer X sin haber hecho Y primero). Muy
+    ligado al punto 12 (checklist de alistamiento reestructurado) — probable
+    que se resuelvan juntos.
+12. **Checklist de "Alistamiento" reestructurado en sub-secciones**:
+    1.1 Apertura de caja, 1.2 Inventarios y documentos de sanidad (escanear
+    y subir), 1.3 Organización de espacios, 1.4 Limpieza de cristalería,
+    1.5 Actividad del día. Hoy "Alistamiento" en Checklist es un solo
+    toggle Listo/foto — esto lo expande a una checklist real de 5 partes,
+    con subida de documentos (no solo fotos) en 1.2. Afecta
+    `checklist_entries`/`checklist_photos` y `ChecklistClient.tsx`.
+13. **Reportes semanales organizados por año** — hoy el PDF semanal se
+    genera bajo demanda para la semana actual/últimos 7 días, no se guarda
+    un archivo. Falta: ¿se debe guardar cada semana generada en Storage
+    (como ya se hace con el horario) para poder verlas después agrupadas
+    por año?
+14. **Revisar cálculo de puntualidad**: el usuario da la regla exacta —
+    llega a tiempo o dentro de los primeros 10 min → 5 puntos; 11-15 min →
+    3 puntos; después → 0 puntos y se van descontando puntos por tardanza;
+    meta semanal para bonificación = 35 puntos. Comparar contra
+    `computeAutoPuntualidad` en `src/lib/bonos.ts` (hoy es un booleano
+    true/false/null, no un sistema de puntos) — probablemente hay que
+    rediseñar esa función y cómo se acumula/muestra el puntaje semanal.
+15. **Bonificación diaria basada en % de venta adicional → puntos → plata**:
+    "sacar el porcentaje de lo que se ganó adicional para dar los puntos,
+    puntos equivalente a plata". Revisar `computeAutoVentas` en
+    `src/lib/bonos.ts` y cómo se paga hoy la bonificación (`bonuses` table)
+    — falta la tabla de conversión exacta puntos↔pesos.
+16. **"No encontré en dónde calificar a los meseros"** — SÍ existe:
+    Agenda → sección "Calificación del equipo" (`CalificacionesSection.tsx`),
+    casi al final de la página. Pero solo muestra gente que ya tiene un
+    turno (`shifts`) agregado ESE día — si no se agregó el turno todavía,
+    aparece "Agrega turnos primero..." y es fácil pensar que no existe.
+    Posible mejora de UX: hacerla más visible o no depender de que el turno
+    ya esté cargado.
+17. **"Control de bajas en cocina" para cocinera** — `cocinero` ya tiene
+    acceso a "Pérdidas" en el nav (`lib/nav.ts`) para reportar bajas/mermas.
+    Confirmar con el usuario si esto ya cubre el pedido o si "control de
+    bajas" es un concepto distinto (ej. un registro específico de
+    desperdicio de cocina separado de Pérdidas general).
+
+### Notas para retomar
+
+- Los puntos 3, 4, 5, 8, 10, 11, 12, 13, 14, 15, 17 necesitan al menos una
+  pregunta de negocio antes de implementar — no asumir números, nombres de
+  items, ni reglas de cálculo.
+- Los puntos 6, 9, 16 se pueden resolver revisando/mejorando lo que ya
+  existe, sin necesitar tanta info nueva del usuario.
+- Dado el volumen, conviene ir en tandas chicas y confirmar con el usuario
+  antes de construir cada una, no todo de una vez.
 
 ## Estructura del proyecto (resumen)
 
@@ -331,42 +350,62 @@ agregue un patch nuevo.
 supabase/
   schema.sql          fuente de verdad del esquema (instalaciones nuevas)
   seed.sql            catálogo real completo
-  patches/0001-0010   incrementales ya aplicados por el usuario (idempotentes)
-  patches/0011        void_order — nuevo, falta que el usuario lo corra
-  patches/CATCHUP_0001_0011.sql   los 11 combinados en uno
+  patches/0001-0017   incrementales (idempotentes)
+  patches/CATCHUP.sql los patches combinados — NOMBRE FIJO, no renombrar
 
-src/app/(staff)/       todas las vistas autenticadas, un layout compartido
+src/app/(staff)/       todas las vistas autenticadas, layout compartido
                        con who-bar + nav por rol (src/lib/nav.ts)
+  agenda/              Operación del día, Turnos, Asistencia, Calificación
+                       del equipo, Plantilla semanal, PDF de horario
+  pedidos/             Pantalla de pedidos en vivo para cocina (jefe+cocinero)
 src/app/api/           Route Handlers con service role (auth, users, drive)
 src/app/login/         login por PIN + alta del primer jefe
 src/app/rate/[userId]/ calificación de servicio pública (QR, sin login)
+src/proxy.ts           refresca la sesión de Supabase en cada request
+                       (Next.js 16 renombró "middleware" a esto)
 
 src/lib/auth/          hashing PIN, sesión, current-user (requireUser/requireRole)
 src/lib/supabase/      client.ts (browser), server.ts (SSR), admin.ts (service role)
-src/lib/format.ts      todos los helpers de fecha/hora/moneda (puros, sin Date.now suelto)
-src/lib/earnings.ts    shiftEarnings() puro (mesero por franja, cocinero/admin plana)
-src/lib/bonos.ts       computeAutoVentas/computeAutoPuntualidad (compartido)
-src/lib/inventory-status.ts   normalizeStatus/isCriticalItem (compartido Inventario+Panel)
+src/lib/format.ts      fecha/hora/moneda + helpers de zona horaria Bogotá
+                       (todayISO, bogotaDayRangeUTC, bogotaDateOf) — ver arriba
+src/lib/earnings.ts    shiftEarnings() puro
+src/lib/bonos.ts       computeAutoVentas/computeAutoPuntualidad (revisar #14/#15)
+src/lib/inventory-status.ts   normalizeStatus/isCriticalItem
 src/lib/hooks/use-now-tick.ts hook de reloj seguro para la regla de pureza
-src/lib/google-auth.ts        access token de la cuenta de servicio de Google (compartido)
-src/lib/google-sheets.ts      sync de la hoja de cierres de caja (REST directo, sin SDK de googleapis)
-src/lib/pdf.ts                helper compartido para los reportes PDF (jsPDF, con marca)
+src/lib/google-auth.ts        access token de la cuenta de servicio de Google
+src/lib/google-sheets.ts      sync de la hoja de cierres de caja (REST directo)
+src/lib/pdf.ts                helper compartido para reportes PDF (jsPDF, con marca)
 
 src/components/panel-ui.tsx   Section/Row/EmptyState/FieldLabel/MiniButton compartidos
 src/components/Logo.tsx       logo real con next/image
+
+.claude/launch.json    config del preview del browser tool (npm run dev, puerto 3000)
 ```
 
 ## Convenciones de trabajo con este usuario
 
-- Español, tono directo, respuestas cortas con lo esencial.
+- Español, tono directo, respuestas cortas con lo esencial. El usuario escribe
+  rápido y a veces con typos/mensajes garabateados — confirmar la intención
+  antes de implementar si el mensaje es ambiguo, en vez de adivinar.
 - Después de CADA cambio de código: `npm run build` y `npm run lint`, ambos
   deben quedar limpios antes de reportar terminado.
-- Cualquier cambio de schema → schema.sql actualizado + patch numerado nuevo +
-  avisar al usuario qué patch correr (idealmente ofrecer regenerar el CATCHUP).
-- No inventar datos ni lógica de negocio — si algo no está claro en el HTML
-  original o en lo que el usuario pide, preguntar antes de asumir (ya pasó con
-  Exteriores en checklist de cierre, con el rol de "administración", con la
-  fuente exacta del checklist detallado).
-- El usuario ha compartido archivos reales (Excel de checklist, capturas de
-  logo) — cuando dé una fuente real, usarla tal cual, no re-derivar de
-  memoria.
+- Cualquier cambio de schema → `schema.sql` actualizado + patch numerado
+  nuevo (idempotente de verdad, ver error real #16) + regenerar
+  `CATCHUP.sql` + avisar al usuario que lo corra.
+- No inventar datos ni lógica de negocio — preguntar antes de asumir. El
+  backlog de "Qué falta" tiene varios puntos así, marcados explícitamente.
+- El usuario ha compartido archivos reales (CSV de horarios, capturas de
+  pantalla de la app real en su celular) — cuando dé una fuente real, usarla
+  tal cual, no re-derivar de memoria.
+- **Nunca probar contra datos/fechas reales de operación** — usar fechas o
+  cuentas claramente ficticias, y limpiar después. Patrón establecido: crear
+  un usuario temporal (rol jefe, PIN conocido) vía API admin de Supabase,
+  probar, y **borrarlo al terminar** (`DELETE` en `users` + `DELETE` en
+  `auth.users` vía API admin, en ese orden, más limpiar cualquier fila que el
+  test haya creado en otras tablas por FK).
+- Antes de dar por buena una corrección de un patch/RLS, **verificar en vivo
+  con una cuenta real** (no solo la service role key, que bypasea RLS) — ver
+  error real #16.
+- El uso real de la app es mayormente desde celular (WhatsApp browser /
+  Safari/Chrome móvil) — cualquier cambio de UI debe verificarse en viewport
+  375px además de desktop, no solo desktop.
