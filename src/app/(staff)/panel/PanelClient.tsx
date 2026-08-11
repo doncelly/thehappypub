@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeStatus, isCriticalItem, type RawItemStatus, type ItemStatus } from "@/lib/inventory-status";
 import { levelOf, type StatusGaugeKey } from "@/lib/constants/status-levels";
-import { fmtCOP, fmtDateShort, fmtHM, fmtQty, fmtRelTime, bogotaDateOf } from "@/lib/format";
+import { fmtCOP, fmtDateShort, fmtDateLabel, fmtHM, fmtQty, fmtRelTime, bogotaDateOf } from "@/lib/format";
 import { Section, EmptyState, Row, MiniButton } from "@/components/panel-ui";
 import { APERTURA_ITEMS, CIERRE_ITEMS, allChecked } from "@/lib/constants/checklist-areas";
 import { generateWeeklyReportPdf, exportCajaCsv } from "./reports";
@@ -60,6 +60,7 @@ type Props = {
   monthlyGoal: number | null;
   ventasMes: number;
   cajaAyerDiferencia: number | null;
+  reportsByYear: Record<string, { date: string; url: string }[]>;
 };
 
 
@@ -493,7 +494,7 @@ export function PanelClient(props: Props) {
         <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
           <p className="text-[11px] leading-relaxed text-text-faint">
             Genera un PDF con asistencia, cumplimiento de meta, bonificaciones y pérdidas de los últimos 7 días. Se
-            descarga a la carpeta de Descargas de tu navegador — la app no guarda copia propia.
+            descarga a la carpeta de Descargas de tu navegador y también queda guardado abajo, agrupado por año.
           </p>
           <button
             onClick={onDownloadWeeklyPdf}
@@ -522,6 +523,34 @@ export function PanelClient(props: Props) {
             servicio de Google, ver GOOGLE_DRIVE_SETUP.md. Si no está lista, siempre puedes exportar el CSV y
             subirlo tú mismo.
           </p>
+
+          {Object.keys(props.reportsByYear).length > 0 && (
+            <div className="space-y-1.5 border-t border-border pt-2.5">
+              <p className="text-[11px] font-bold text-text-dim">Reportes semanales guardados</p>
+              {Object.entries(props.reportsByYear)
+                .sort(([a], [b]) => (a < b ? 1 : -1))
+                .map(([year, reports]) => (
+                  <details key={year} className="rounded-lg border border-border bg-surface-2 px-2.5 py-1.5">
+                    <summary className="cursor-pointer text-[12px] font-semibold">
+                      {year} ({reports.length})
+                    </summary>
+                    <div className="mt-1.5 space-y-1">
+                      {reports.map((r) => (
+                        <a
+                          key={r.date}
+                          href={r.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block text-[11.5px] text-gold underline"
+                        >
+                          📄 {fmtDateLabel(r.date)}
+                        </a>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+            </div>
+          )}
         </div>
       </Section>
 

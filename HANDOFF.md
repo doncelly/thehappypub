@@ -173,12 +173,15 @@ Pega este archivo completo como primer mensaje. El asistente debe:
   (apertura de caja → inventario diario, ver punto 11 de "Qué falta").
   Ninguno de los dos requirió cambio de schema — ambos se calculan en vivo
   o leen tablas ya existentes.
+- **Paso 16** — Reportes semanales guardados en Storage agrupados por año
+  (ver punto 13 de "Qué falta"). Patch 0021 (policies de storage.objects
+  para el folder `weekly-reports/`).
 
 ## Migraciones SQL — MUY IMPORTANTE
 
 `supabase/schema.sql` y `supabase/seed.sql` son la fuente de verdad para
 **instalaciones nuevas**. El proyecto Supabase real del usuario se actualiza
-con patches incrementales en `supabase/patches/` (0001 a 0020, todos
+con patches incrementales en `supabase/patches/` (0001 a 0021, todos
 idempotentes — ver error real #16 sobre qué tan en serio hay que tomarse
 "idempotente"). Archivo combinado:
 
@@ -334,11 +337,19 @@ antes de asumir**, no inventar reglas.
     subida de documento/PDF aparte — se asumió que fotografiar el documento
     físico es equivalente práctico a "escanear" para este negocio. Si el
     usuario quiere subida de PDF real, falta ese trabajo aparte.
-13. **Reportes semanales organizados por año** — hoy el PDF semanal se
-    genera bajo demanda para la semana actual/últimos 7 días, no se guarda
-    un archivo. Falta: ¿se debe guardar cada semana generada en Storage
-    (como ya se hace con el horario) para poder verlas después agrupadas
-    por año?
+13. ✅ **Reportes semanales organizados por año** — hecho. Cada vez que el
+    jefe genera el PDF semanal en Panel (`generateWeeklyReportPdf` en
+    `panel/reports.ts`), además de descargarse se sube a Storage en
+    `weekly-reports/{fecha}.pdf` (mismo bucket y patrón que
+    `agenda-schedules/`, upsert). Panel tiene una nueva sección "Reportes
+    semanales guardados" que lista lo archivado agrupado por año
+    (`<details>` colapsable por año), con link firmado a cada PDF. Necesitó
+    patch 0021 (faltaban las policies de storage.objects para el folder
+    nuevo — sin eso el upload fallaba con 400 por RLS, encontrado y
+    corregido en vivo durante esta sesión). El reporte es "últimos 7 días"
+    (no semana calendario lunes-domingo), así que la key de archivo es la
+    fecha del día en que se generó, no un lunes — si se regenera el mismo
+    día, se sobreescribe (comportamiento esperado).
 14. ✅ **Cálculo de puntualidad en puntos** — hecho. `computeAutoPuntualidadPuntos`
     en `src/lib/bonos.ts` (reemplazó el booleano `computeAutoPuntualidad`):
     a tiempo o hasta 10 min tarde = 5 pts, 11-15 min = 3 pts, más de 15 min =

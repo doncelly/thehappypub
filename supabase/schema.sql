@@ -1474,6 +1474,7 @@ grant select (id, name, active) on public.users to anon; -- solo lo mínimo para
 --   checklist/{YYYY-MM-DD}/{user_id}/{section}.jpg
 --   deliveries/{delivery_id}/{producto|factura}.jpg
 --   agenda-schedules/{monday}.pdf — horario semanal, uno por semana (se sobrescribe)
+--   weekly-reports/{date}.pdf — reporte semanal del jefe, uno por generación (se sobrescribe)
 
 insert into storage.buckets (id, name, public)
 values ('happy-pub-photos', 'happy-pub-photos', false)
@@ -1494,17 +1495,23 @@ on storage.objects for insert to authenticated with check (
   bucket_id = 'happy-pub-photos' and (
     ( (storage.foldername(name))[1] = 'checklist' and (storage.foldername(name))[3] = public.current_user_id()::text ) or
     (storage.foldername(name))[1] = 'deliveries' or
-    ( (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe() )
+    ( (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe() ) or
+    ( (storage.foldername(name))[1] = 'weekly-reports' and public.is_jefe() )
   )
 );
 
--- El upload de agenda-schedules usa upsert (regenerar el PDF de una semana ya
--- generada antes hace un UPDATE, no un INSERT) — sin esta policy, upsert
+-- El upload de agenda-schedules/weekly-reports usa upsert (regenerar un PDF
+-- ya generado antes hace un UPDATE, no un INSERT) — sin esta policy, upsert
 -- fallaba por RLS aunque insert por sí solo hubiera funcionado.
 create policy "storage: agenda-schedules jefe actualiza"
 on storage.objects for update to authenticated
 using (bucket_id = 'happy-pub-photos' and (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe())
 with check (bucket_id = 'happy-pub-photos' and (storage.foldername(name))[1] = 'agenda-schedules' and public.is_jefe());
+
+create policy "storage: weekly-reports jefe actualiza"
+on storage.objects for update to authenticated
+using (bucket_id = 'happy-pub-photos' and (storage.foldername(name))[1] = 'weekly-reports' and public.is_jefe())
+with check (bucket_id = 'happy-pub-photos' and (storage.foldername(name))[1] = 'weekly-reports' and public.is_jefe());
 
 -- ============================================================================
 -- 18. REALTIME (Paso 3) — se deja activado de una vez, no hace daño antes de tiempo

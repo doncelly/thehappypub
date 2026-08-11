@@ -98,6 +98,23 @@ export default async function PanelPage() {
         (ordersYesterday ?? []).reduce((s, o) => s + o.total, 0)
       : null;
 
+  // Punto 13 del backlog: reportes semanales guardados en Storage,
+  // agrupados por año — se listan directo del bucket (nombre = fecha del
+  // reporte) en vez de llevar una tabla aparte, ya que schedule-pdf.ts hace
+  // lo mismo para el horario semanal.
+  const { data: weeklyReportFiles } = await supabase.storage
+    .from("happy-pub-photos")
+    .list("weekly-reports", { limit: 1000, sortBy: { column: "name", order: "desc" } });
+
+  const reportsByYear: Record<string, { date: string; url: string }[]> = {};
+  for (const f of weeklyReportFiles ?? []) {
+    const m = f.name.match(/^(\d{4})-\d{2}-\d{2}\.pdf$/);
+    if (!m) continue;
+    const { data: signed } = await supabase.storage.from("happy-pub-photos").createSignedUrl(`weekly-reports/${f.name}`, 3600);
+    if (!signed) continue;
+    (reportsByYear[m[1]] ??= []).push({ date: f.name.replace(".pdf", ""), url: signed.signedUrl });
+  }
+
   return (
     <PanelClient
       today={today}
@@ -119,6 +136,7 @@ export default async function PanelPage() {
       monthlyGoal={monthlyGoal?.min_goal ?? null}
       ventasMes={(ordersMonth ?? []).reduce((s, o) => s + o.total, 0)}
       cajaAyerDiferencia={cajaAyerDiferencia}
+      reportsByYear={reportsByYear}
     />
   );
 }

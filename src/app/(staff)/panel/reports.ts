@@ -6,6 +6,8 @@ import { computeAutoPuntualidadPuntos, PUNTUALIDAD_META_SEMANAL } from "@/lib/bo
 import { createReportDoc, HAPPY_GOLD, GRAY } from "@/lib/pdf";
 import { buildCajaCsvRows, rowsToCsvString } from "@/lib/caja-csv";
 
+const REPORTS_BUCKET = "happy-pub-photos";
+
 // Reporte semanal y CSV de caja del jefe — puertos directos de
 // generateWeeklyPDF() y exportCajaCSV() del HTML original. Se pide la data
 // bajo demanda (al tocar el botón) en vez de cargarla siempre en /panel.
@@ -128,6 +130,15 @@ export async function generateWeeklyReportPdf(supabase: SupabaseClient<any>, tod
   }
 
   doc.save(`reporte-happy-${days[6]}.pdf`);
+
+  // Punto 13 del backlog: además de descargar, guarda una copia en Storage
+  // (bucket compartido con horarios/fotos) para poder verla después agrupada
+  // por año — key = último día del rango (el que cambia cada vez que se
+  // genera, ya que el reporte es "últimos 7 días" y no una semana calendario
+  // fija). Regenerar el mismo día sobrescribe esa copia (upsert).
+  const blob = doc.output("blob");
+  const path = `weekly-reports/${days[6]}.pdf`;
+  await supabase.storage.from(REPORTS_BUCKET).upload(path, blob, { upsert: true, contentType: "application/pdf" });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Database=any hasta correr `npm run supabase:types`
