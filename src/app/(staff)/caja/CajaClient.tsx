@@ -11,6 +11,7 @@ type Props = {
   cashTransportAid: CashTransportAid[];
   users: UserRow[];
   ventasHoy: number;
+  cashRegisterYesterday: CashRegister;
 };
 
 function shiftDate(iso: string, delta: number): string {
@@ -56,6 +57,7 @@ export function CajaClient(props: Props) {
         purchases={props.cashPurchases}
         transportAid={props.cashTransportAid}
         ventasHoy={props.ventasHoy}
+        cashRegisterYesterday={props.cashRegisterYesterday}
         onChanged={() => router.refresh()}
       />
     </div>

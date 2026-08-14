@@ -12,10 +12,11 @@ type Props = {
   purchases: CashPurchase[];
   transportAid: CashTransportAid[];
   ventasHoy: number;
+  cashRegisterYesterday: CashRegister;
   onChanged: () => void;
 };
 
-export function CajaSection({ date, cashRegister: c, purchases, transportAid, ventasHoy, onChanged }: Props) {
+export function CajaSection({ date, cashRegister: c, purchases, transportAid, ventasHoy, cashRegisterYesterday: y, onChanged }: Props) {
   const supabase = createClient();
 
   const [aperResp, setAperResp] = useState(c?.open_by ?? "");
@@ -153,6 +154,16 @@ export function CajaSection({ date, cashRegister: c, purchases, transportAid, ve
 
   return (
     <>
+      {y && y.close_time && (
+        <div className="mb-3.5 rounded-xl border border-gold/40 bg-gold/10 p-3 text-[11.5px]">
+          <div className="mb-1 font-bold text-gold">Así quedó la caja de ayer al cerrar</div>
+          <div>
+            Cerró {y.close_by ?? "—"} a las {y.close_time.slice(0, 5)} · Remanente acumulado:{" "}
+            <b>{y.remnant_accumulated != null ? fmtCOP(y.remnant_accumulated) : "—"}</b> · Base para hoy:{" "}
+            <b>{y.next_base != null ? fmtCOP(y.next_base) : "—"}</b>
+          </div>
+        </div>
+      )}
       <Section title="Recibo de caja (apertura)">
         <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">

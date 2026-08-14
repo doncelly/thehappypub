@@ -180,6 +180,8 @@ Pega este archivo completo como primer mensaje. El asistente debe:
   15 de "Qué falta"). `computeAutoVentasPuntos` en `bonos.ts`, $1.000/punto,
   "Bono estimado" visible en Agenda/Panel/reporte personal. No requirió
   cambio de schema.
+- **Paso 18** — Banner "Así quedó la caja de ayer al cerrar" en Caja (ver
+  punto 18 de "Qué falta"). Solo lectura, no cambio de schema.
 
 ## Migraciones SQL — MUY IMPORTANTE
 
@@ -397,13 +399,63 @@ antes de asumir**, no inventar reglas.
     motivo predefinido tipo "se quemó / se cayó / venció" para que la
     cocinera no escriba texto libre cada vez. Falta que el usuario diga si
     quiere ese detalle o lo deja tal cual.
+18. ✅ **"Así quedó la caja de ayer al cerrar" visible al abrir hoy** — hecho
+    (13 ago 2026). `caja/page.tsx` ahora también consulta el `cash_register`
+    del día anterior; si ya tiene `close_time`, `CajaSection.tsx` muestra un
+    banner de referencia (responsable, hora, remanente acumulado, base para
+    hoy) arriba de "Recibo de caja (apertura)". Solo lectura, no autocompleta
+    los campos — el usuario pidió esto porque quien abre caja al día
+    siguiente no tenía forma de saber en qué quedó sin revisar el chat/Drive
+    aparte. No requirió cambio de schema.
+19. **Cervezas artesanales de barril no se pueden vender** — confirmado en
+    código (13 ago 2026): los 8 barriles (`barril_gulupa`, `barril_germania`,
+    etc.) existen en `items`/Inventario, pero **no hay ningún `menu_items`**
+    para cerveza artesanal — no aparecen en Vender, aunque las promos del día
+    las mencionan explícitamente ("Cerveza artesanal de barril con 15%
+    descuento"). El usuario pide presentaciones vaso (300ml), pinta (500ml) y
+    jarra (1.5L). **Preguntar antes de construir**: (a) ¿se vende por sabor
+    específico (Amber Ale, Germania, etc. — hasta 24 combinaciones
+    sabor×tamaño) o genérico "cerveza artesanal" sin importar cuál barril
+    está activo? (b) precio de cada tamaño; (c) ¿debe descontar inventario
+    del barril correspondiente al vender? Los barriles son `mode: 'gauge'`
+    (completo/tres_cuartos/mitad/un_cuarto/agotado), no cantidad exacta —
+    no hay hoy ningún `menu_item` que descuente un item en modo gauge al
+    venderse, así que esto último sería trabajo nuevo si lo quieren.
+20. **Cierre de caja — sumas para Siigo**: el usuario pide que "se hagan las
+    sumas de las facturas y se muestren" porque Siigo pide al cerrar turno:
+    base de caja, pagos con tarjetas y **otros medios de pago** (este último
+    no existe hoy como campo — solo hay efectivo y tarjetas). Hoy "Pagos en
+    tarjetas del día" es un solo número que el mesero ya suma a mano antes de
+    escribirlo — mismo patrón que "Compras desde remanente"/"Auxilios de
+    transporte" (que sí son ítem por ítem con suma automática) podría
+    aplicarse aquí para reducir el margen de error. **Preguntar antes de
+    construir**: ¿quieren que tarjetas y "otros medios de pago" sean listas
+    de ítems (como Compras) que la app suma sola, o alcanza con agregar
+    "otros medios de pago" como un campo más de número único (como ya son
+    efectivo/tarjetas)?
+21. **Documento "Observaciones APP.docx"** (compartido 13 ago 2026) — son
+    capturas del sistema anterior en Excel/Sheets (plantillas de turnos,
+    checklist con %, calendario, formato de caja) más una propuesta de 8
+    módulos nuevos organizados por rol (ADMINISTRADOR: Resumen, Programación
+    semanal, Auditoría, Caja visualizador, Inventario visualizador, Pagos,
+    Pedidos a proveedor, Calendario — cada uno con export PDF/CSV). Gran
+    parte ya existe bajo otro nombre (Panel≈Resumen, Mi día≈Mi turno,
+    Agenda≈Programación, Checklist≈Auditoría de alistamiento, Caja, Perdidas,
+    Recibidos≈Pedidos). Lo genuinamente nuevo: exports PDF/CSV por módulo,
+    "Módulo de Pagos" (arriendo/servicios/nómina/propinas con comprobante
+    adjunto — esto sí es nuevo, no existe), calificación de Auditoría como
+    % de cumplimiento (hoy es Listo/Pendiente, no %). **No se tocó código
+    todavía** — es demasiado grande para una tanda, necesita su propia
+    conversación para decidir qué construir y qué ya está cubierto.
 
 ### Notas para retomar
 
-- Solo queda pendiente el punto 17 (esperando que el usuario confirme si
-  quiere el motivo predefinido para bajas de cocina, o lo deja tal cual con
-  "Pérdidas"). Todo lo demás del backlog original ya quedó resuelto u
-  omitido a pedido del usuario (punto 5).
+- Pendientes de respuesta del usuario: 17 (motivo predefinido para bajas de
+  cocina, sí o no), 19 (sabor/precio/inventario de cerveza artesanal), 20
+  (¿ítems sumables o campo único para tarjetas/otros medios de pago?), 21
+  (qué construir del documento de observaciones, si algo). Todo lo demás del
+  backlog original ya quedó resuelto u omitido a pedido del usuario
+  (punto 5).
 - Los puntos 6, 9, 16 se pueden resolver revisando/mejorando lo que ya
   existe, sin necesitar tanta info nueva del usuario.
 - Dado el volumen, conviene ir en tandas chicas y confirmar con el usuario

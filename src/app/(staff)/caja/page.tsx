@@ -19,6 +19,9 @@ export default async function CajaPage({
   await requireRole("jefe", "mesero");
   const { date: dateParam } = await searchParams;
   const date = isValidISODate(dateParam) ? dateParam : todayISO();
+  const yesterdayDate = new Date(`${date}T12:00:00`);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = yesterdayDate.toISOString().slice(0, 10);
 
   const supabase = await createClient();
   const dayRange = bogotaDayRangeUTC(date);
@@ -29,15 +32,17 @@ export default async function CajaPage({
     { data: cashTransportAid, error: cashAidError },
     { data: users, error: usersError },
     { data: ordersToday, error: ordersError },
+    { data: cashRegisterYesterday, error: cashYesterdayError },
   ] = await Promise.all([
     supabase.from("cash_register").select("*").eq("date", date).maybeSingle(),
     supabase.from("cash_register_purchases").select("*").eq("date", date),
     supabase.from("cash_register_transport_aid").select("*").eq("date", date),
     supabase.from("users").select("id, name"),
     supabase.from("orders").select("total").gte("created_at", dayRange.start).lte("created_at", dayRange.end),
+    supabase.from("cash_register").select("*").eq("date", yesterday).maybeSingle(),
   ]);
 
-  for (const [label, error] of Object.entries({ cashError, cashPurchasesError, cashAidError, usersError, ordersError })) {
+  for (const [label, error] of Object.entries({ cashError, cashPurchasesError, cashAidError, usersError, ordersError, cashYesterdayError })) {
     logSupabaseError(`CajaPage ${label}`, error);
   }
 
@@ -49,6 +54,7 @@ export default async function CajaPage({
       cashTransportAid={cashTransportAid ?? []}
       users={users ?? []}
       ventasHoy={(ordersToday ?? []).reduce((s, o) => s + o.total, 0)}
+      cashRegisterYesterday={cashRegisterYesterday}
     />
   );
 }
