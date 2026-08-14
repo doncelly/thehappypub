@@ -11,6 +11,7 @@ export type CashRegisterCsvRow = {
   close_by: string | null;
   cash_amount: number | null;
   card_amount: number | null;
+  other_payment_amount: number | null;
   remnant_accumulated: number | null;
   next_base: number | null;
   last_table: string | null;
@@ -25,6 +26,7 @@ export const CAJA_CSV_HEADER = [
   "Responsable cierre",
   "Efectivo",
   "Tarjetas",
+  "Otros medios de pago",
   "Total ventas (caja)",
   "Ventas registradas (app)",
   "Remanente acumulado",
@@ -42,7 +44,7 @@ export function buildCajaCsvRows(
     const c = cashRegisters.find((r) => r.date === d);
     if (!c) continue;
     const ventasApp = ventasByDate[d] ?? 0;
-    const totalCaja = (Number(c.cash_amount) || 0) + (Number(c.card_amount) || 0);
+    const totalCaja = (Number(c.cash_amount) || 0) + (Number(c.card_amount) || 0) + (Number(c.other_payment_amount) || 0);
     rows.push([
       d,
       c.open_by ?? "",
@@ -52,6 +54,7 @@ export function buildCajaCsvRows(
       c.close_by ?? "",
       c.cash_amount ?? "",
       c.card_amount ?? "",
+      c.other_payment_amount ?? "",
       totalCaja,
       ventasApp,
       c.remnant_accumulated ?? "",

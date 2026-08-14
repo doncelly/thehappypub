@@ -11,6 +11,7 @@ export type CashRegister = {
   close_time: string | null;
   cash_amount: number | null;
   card_amount: number | null;
+  other_payment_amount: number | null;
   remnant_accumulated: number | null;
   next_base: number | null;
   last_table: string | null;
@@ -20,4 +21,6 @@ export type CashRegister = {
 
 export type CashPurchase = { id: number; date: string; concept: string; amount: number };
 export type CashTransportAid = { id: number; date: string; collaborator: string; amount: number };
+export type CashCardPayment = { id: number; date: string; concept: string | null; amount: number };
+export type CashOtherPayment = { id: number; date: string; concept: string | null; amount: number };
 export type UserRow = { id: string; name: string };

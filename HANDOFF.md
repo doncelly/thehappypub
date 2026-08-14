@@ -182,12 +182,15 @@ Pega este archivo completo como primer mensaje. El asistente debe:
   cambio de schema.
 - **Paso 18** — Banner "Así quedó la caja de ayer al cerrar" en Caja (ver
   punto 18 de "Qué falta"). Solo lectura, no cambio de schema.
+- **Paso 19** — Cerveza artesanal vendible con descuento automático de
+  barril por volumen (ver punto 19 de "Qué falta", patch 0023) + pagos con
+  tarjeta/otros medios itemizados en Caja (ver punto 20, patch 0022).
 
 ## Migraciones SQL — MUY IMPORTANTE
 
 `supabase/schema.sql` y `supabase/seed.sql` son la fuente de verdad para
 **instalaciones nuevas**. El proyecto Supabase real del usuario se actualiza
-con patches incrementales en `supabase/patches/` (0001 a 0021, todos
+con patches incrementales en `supabase/patches/` (0001 a 0023, todos
 idempotentes — ver error real #16 sobre qué tan en serio hay que tomarse
 "idempotente"). Archivo combinado:
 
@@ -407,32 +410,37 @@ antes de asumir**, no inventar reglas.
     los campos — el usuario pidió esto porque quien abre caja al día
     siguiente no tenía forma de saber en qué quedó sin revisar el chat/Drive
     aparte. No requirió cambio de schema.
-19. **Cervezas artesanales de barril no se pueden vender** — confirmado en
-    código (13 ago 2026): los 8 barriles (`barril_gulupa`, `barril_germania`,
-    etc.) existen en `items`/Inventario, pero **no hay ningún `menu_items`**
-    para cerveza artesanal — no aparecen en Vender, aunque las promos del día
-    las mencionan explícitamente ("Cerveza artesanal de barril con 15%
-    descuento"). El usuario pide presentaciones vaso (300ml), pinta (500ml) y
-    jarra (1.5L). **Preguntar antes de construir**: (a) ¿se vende por sabor
-    específico (Amber Ale, Germania, etc. — hasta 24 combinaciones
-    sabor×tamaño) o genérico "cerveza artesanal" sin importar cuál barril
-    está activo? (b) precio de cada tamaño; (c) ¿debe descontar inventario
-    del barril correspondiente al vender? Los barriles son `mode: 'gauge'`
-    (completo/tres_cuartos/mitad/un_cuarto/agotado), no cantidad exacta —
-    no hay hoy ningún `menu_item` que descuente un item en modo gauge al
-    venderse, así que esto último sería trabajo nuevo si lo quieren.
-20. **Cierre de caja — sumas para Siigo**: el usuario pide que "se hagan las
-    sumas de las facturas y se muestren" porque Siigo pide al cerrar turno:
-    base de caja, pagos con tarjetas y **otros medios de pago** (este último
-    no existe hoy como campo — solo hay efectivo y tarjetas). Hoy "Pagos en
-    tarjetas del día" es un solo número que el mesero ya suma a mano antes de
-    escribirlo — mismo patrón que "Compras desde remanente"/"Auxilios de
-    transporte" (que sí son ítem por ítem con suma automática) podría
-    aplicarse aquí para reducir el margen de error. **Preguntar antes de
-    construir**: ¿quieren que tarjetas y "otros medios de pago" sean listas
-    de ítems (como Compras) que la app suma sola, o alcanza con agregar
-    "otros medios de pago" como un campo más de número único (como ya son
-    efectivo/tarjetas)?
+19. ✅ **Cervezas artesanales de barril** — hecho (13-14 ago 2026). 15
+    productos nuevos en Vender (categoría nueva "🍺 Cerveza Artesanal"):
+    Vaso 300ml / Pinta 500ml / Jarra 1.5L para los 5 sabores con barril
+    activo hoy (Amber Ale, Happy Gulupa, Mulata, Brown, Germania — precios
+    reales de la carta). Negra, Roja AAA y De Temporada quedaron afuera
+    ("de esas no hay" — sin barril activo, no se les creó producto de
+    venta). La venta **descuenta el barril automáticamente por volumen**:
+    `items.gauge_capacity_ml` (litros reales dados por el usuario) +
+    `item_status.gauge_consumed_ml` (contador acumulado) — el nivel
+    (Completo/3-4/Mitad/1-4/Agotado) se deriva siempre de ese contador vs.
+    la capacidad, tanto en `register_order` como en `void_order` (reversa
+    simétrica al anular). Si el jefe/mesero ajusta el nivel a mano en
+    Inventario, `InventarioClient.tsx` también sincroniza el contador para
+    que la próxima venta no lo pise. Patch 0023. Probado en vivo: venta que
+    no cruza nivel (+300ml, sin cambio de nivel) y venta que sí cruza
+    (+9000ml, Completo→3/4) — ambas con su reversa exacta al anular.
+    **Backfill hecho en la base real**: los 5 barriles ya tenían un nivel
+    real antes de este patch pero `gauge_consumed_ml` arrancaba en 0 (columna
+    nueva) — se sincronizó a mano para que coincida con el nivel real actual
+    de cada uno, si no la primera venta los hubiera saltado a "Completo" por
+    error.
+20. ✅ **Cierre de caja — sumas para Siigo** — hecho. "Pagos en tarjetas del
+    día" (antes un solo número escrito a mano) ahora es una lista de recibos
+    (concepto + valor) que la app suma sola, igual que "Compras desde
+    remanente". Se agregó "Otros medios de pago" con el mismo patrón
+    (transferencia, Nequi, etc. — no existía antes como campo).
+    `cash_register.other_payment_amount` nuevo (además de `card_amount`, que
+    ahora se guarda calculado en vez de tecleado). Alerta de descuadre de
+    Panel y export CSV actualizados para incluir el nuevo campo. Patch 0022.
+    Probado en vivo: agregar un pago con tarjeta + uno de otro medio, suman
+    correcto al total.
 21. **Documento "Observaciones APP.docx"** (compartido 13 ago 2026) — son
     capturas del sistema anterior en Excel/Sheets (plantillas de turnos,
     checklist con %, calendario, formato de caja) más una propuesta de 8
@@ -451,11 +459,9 @@ antes de asumir**, no inventar reglas.
 ### Notas para retomar
 
 - Pendientes de respuesta del usuario: 17 (motivo predefinido para bajas de
-  cocina, sí o no), 19 (sabor/precio/inventario de cerveza artesanal), 20
-  (¿ítems sumables o campo único para tarjetas/otros medios de pago?), 21
-  (qué construir del documento de observaciones, si algo). Todo lo demás del
-  backlog original ya quedó resuelto u omitido a pedido del usuario
-  (punto 5).
+  cocina, sí o no), 21 (qué construir del documento de observaciones, si
+  algo). Todo lo demás del backlog original ya quedó resuelto u omitido a
+  pedido del usuario (punto 5).
 - Los puntos 6, 9, 16 se pueden resolver revisando/mejorando lo que ya
   existe, sin necesitar tanta info nueva del usuario.
 - Dado el volumen, conviene ir en tandas chicas y confirmar con el usuario

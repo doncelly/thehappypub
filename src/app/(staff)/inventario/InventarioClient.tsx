@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { levelOf, nextStatusKey, type StatusGaugeKey } from "@/lib/constants/status-levels";
+import { levelOf, nextStatusKey, mlForLevel, type StatusGaugeKey } from "@/lib/constants/status-levels";
 import { normalizeStatus, type RawItemStatus, type ItemStatus } from "@/lib/inventory-status";
 import { fmtRelTime } from "@/lib/format";
 
@@ -16,6 +16,7 @@ export type RawItemRow = {
   unit: string | null;
   step: number | null;
   min: number | null;
+  gauge_capacity_ml: number | null;
   item_status: RawItemStatus;
 };
 
@@ -101,7 +102,13 @@ export function InventarioClient({ categories, initialItems, usersById, currentU
       ),
     );
     showToast("Actualizado ✓");
-    const { error } = await supabase.from("item_status").update({ status_gauge: next }).eq("item_id", item.id);
+    // Si el barril tiene capacidad conocida, sincroniza gauge_consumed_ml con
+    // el nivel elegido a mano — register_order/void_order derivan el nivel
+    // siempre de ese contador, así que si no se sincroniza, la próxima venta
+    // saltaría el nivel de vuelta a donde iba antes del ajuste manual.
+    const payload: { status_gauge: StatusGaugeKey; gauge_consumed_ml?: number } = { status_gauge: next };
+    if (item.gauge_capacity_ml != null) payload.gauge_consumed_ml = mlForLevel(next, item.gauge_capacity_ml);
+    const { error } = await supabase.from("item_status").update(payload).eq("item_id", item.id);
     if (error) showToast("No se pudo guardar — revisa tu conexión");
   }
 

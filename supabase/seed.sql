@@ -237,6 +237,16 @@ insert into public.items (id, name, category, mode, unit, step, min) values
   -- Otros
   ('cigarrillos_marlboro', 'Marlboro Rojo (cajetilla)', 'otros', 'qty', 'und', 1, 5);
 
+-- Capacidad real (ml) de los barriles que sí están activos hoy — habilita el
+-- descuento automático por volumen al vender cerveza artesanal (register_order).
+-- Negra, Roja AAA y De Temporada no tienen barril activo hoy — sin capacidad
+-- conocida no se les crean productos de venta (ver MENÚ más abajo).
+update public.items set gauge_capacity_ml = 58700 where id = 'barril_amber';
+update public.items set gauge_capacity_ml = 29300 where id = 'barril_gulupa';
+update public.items set gauge_capacity_ml = 20000 where id = 'barril_mulata';
+update public.items set gauge_capacity_ml = 20000 where id = 'barril_brown';
+update public.items set gauge_capacity_ml = 30000 where id = 'barril_germania';
+
 -- ============================================================================
 -- ESTADO INICIAL DE INVENTARIO — una fila por item, arrancando en 0 / agotado
 -- (igual que defaultItems() del original la primera vez que corre la app)
@@ -245,6 +255,16 @@ insert into public.item_status (item_id, status_gauge, qty)
 select id, case when mode = 'gauge' then 'agotado' else null end,
           case when mode = 'qty' then 0 else null end
 from public.items;
+
+-- Arranca en 0/agotado arriba — para barriles con capacidad conocida eso
+-- significa "consumido = capacidad completa" (agotado), no 0 (que el
+-- formato de register_order/void_order leería como "completo"). Sin este
+-- ajuste, la primera venta de una instalación nueva saltaría el barril de
+-- "agotado" a "completo" por error.
+update public.item_status ist
+set gauge_consumed_ml = i.gauge_capacity_ml
+from public.items i
+where i.id = ist.item_id and i.gauge_capacity_ml is not null;
 
 -- ============================================================================
 -- MESAS (TABLES)
@@ -271,7 +291,8 @@ insert into public.menu_categories (id, label, sort_order) values
   ('bebidas_frias',      '🥤 Frías',      4),
   ('bebidas_calientes',  '☕ Calientes',  5),
   ('cocteles',            '🍹 Cócteles',   6),
-  ('tragos',              '🥃 Tragos',     7);
+  ('tragos',              '🥃 Tragos',     7),
+  ('cerveza_artesanal',   '🍺 Cerveza Artesanal', 8);
 
 -- ============================================================================
 -- MENÚ (MENU) — id, name, price, category
@@ -358,7 +379,25 @@ insert into public.menu_items (id, name, price, category) values
   ('m_botella_azul_media','Antioqueño Azul — Media 375ml', 100000,'tragos'),
   ('m_botella_azul_750',  'Antioqueño Azul — Botella 750ml',160000,'tragos'),
   ('m_botella_amar_media','Aguardiente Amarillo — Media 375ml',95000,'tragos'),
-  ('m_botella_amar_750',  'Aguardiente Amarillo — Botella 750ml',150000,'tragos');
+  ('m_botella_amar_750',  'Aguardiente Amarillo — Botella 750ml',150000,'tragos'),
+  -- Cerveza artesanal de barril, por sabor y tamaño (Vaso 300ml, Pinta 500ml,
+  -- Jarra 1.5L) — precios reales de la carta. Solo los 5 sabores con barril
+  -- activo hoy (Negra, Roja AAA y De Temporada no tienen barril conectado).
+  ('m_amber_vaso',    'Amber Ale (Red IPA) — Vaso 300ml',   15900, 'cerveza_artesanal'),
+  ('m_amber_pinta',   'Amber Ale (Red IPA) — Pinta 500ml',  19900, 'cerveza_artesanal'),
+  ('m_amber_jarra',   'Amber Ale (Red IPA) — Jarra 1.5L',   52900, 'cerveza_artesanal'),
+  ('m_gulupa_vaso',   'Happy Gulupa — Vaso 300ml',          15900, 'cerveza_artesanal'),
+  ('m_gulupa_pinta',  'Happy Gulupa — Pinta 500ml',         19900, 'cerveza_artesanal'),
+  ('m_gulupa_jarra',  'Happy Gulupa — Jarra 1.5L',          52900, 'cerveza_artesanal'),
+  ('m_mulata_vaso',   'Mulata (3 Cordilleras) — Vaso 300ml',  15900, 'cerveza_artesanal'),
+  ('m_mulata_pinta',  'Mulata (3 Cordilleras) — Pinta 500ml', 19900, 'cerveza_artesanal'),
+  ('m_mulata_jarra',  'Mulata (3 Cordilleras) — Jarra 1.5L',  52900, 'cerveza_artesanal'),
+  ('m_brown_vaso',    'Brown (Merak) — Vaso 300ml',          14900, 'cerveza_artesanal'),
+  ('m_brown_pinta',   'Brown (Merak) — Pinta 500ml',         18900, 'cerveza_artesanal'),
+  ('m_brown_jarra',   'Brown (Merak) — Jarra 1.5L',          49900, 'cerveza_artesanal'),
+  ('m_germania_vaso', 'Germania — Vaso 300ml',                14900, 'cerveza_artesanal'),
+  ('m_germania_pinta','Germania — Pinta 500ml',               18900, 'cerveza_artesanal'),
+  ('m_germania_jarra','Germania — Jarra 1.5L',                49900, 'cerveza_artesanal');
 
 -- ============================================================================
 -- RECETAS DE DESCUENTO DE INVENTARIO (m.dec[] del MENU original)
@@ -427,7 +466,15 @@ insert into public.menu_item_ingredients (menu_item_id, item_id, qty) values
   ('m_botella_azul_media','botrago_azul_media', 1),
   ('m_botella_azul_750',  'botrago_azul_750', 1),
   ('m_botella_amar_media','botrago_amarillo_media', 1),
-  ('m_botella_amar_750',  'botrago_amarillo_750', 1);
+  ('m_botella_amar_750',  'botrago_amarillo_750', 1),
+  -- Cerveza artesanal: qty acá son ml (no unidades) — register_order/void_order
+  -- tratan estas líneas distinto porque el item destino es mode='gauge' con
+  -- gauge_capacity_ml, no mode='qty' (ver comentario en esas funciones).
+  ('m_amber_vaso',     'barril_amber',    300), ('m_amber_pinta',     'barril_amber',    500), ('m_amber_jarra',     'barril_amber',    1500),
+  ('m_gulupa_vaso',    'barril_gulupa',   300), ('m_gulupa_pinta',    'barril_gulupa',   500), ('m_gulupa_jarra',    'barril_gulupa',   1500),
+  ('m_mulata_vaso',    'barril_mulata',   300), ('m_mulata_pinta',    'barril_mulata',   500), ('m_mulata_jarra',    'barril_mulata',   1500),
+  ('m_brown_vaso',     'barril_brown',    300), ('m_brown_pinta',     'barril_brown',    500), ('m_brown_jarra',     'barril_brown',    1500),
+  ('m_germania_vaso',  'barril_germania', 300), ('m_germania_pinta',  'barril_germania', 500), ('m_germania_jarra',  'barril_germania', 1500);
 
 -- ============================================================================
 -- TARIFAS POR HORA (DEFAULT_RATES)

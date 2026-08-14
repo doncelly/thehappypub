@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { CajaSection } from "./CajaSection";
-import type { CashRegister, CashPurchase, CashTransportAid, UserRow } from "./types";
+import type { CashRegister, CashPurchase, CashTransportAid, CashCardPayment, CashOtherPayment, UserRow } from "./types";
 
 type Props = {
   date: string;
@@ -12,6 +12,8 @@ type Props = {
   users: UserRow[];
   ventasHoy: number;
   cashRegisterYesterday: CashRegister;
+  cashCardPayments: CashCardPayment[];
+  cashOtherPayments: CashOtherPayment[];
 };
 
 function shiftDate(iso: string, delta: number): string {
@@ -58,6 +60,8 @@ export function CajaClient(props: Props) {
         transportAid={props.cashTransportAid}
         ventasHoy={props.ventasHoy}
         cashRegisterYesterday={props.cashRegisterYesterday}
+        cardPayments={props.cashCardPayments}
+        otherPayments={props.cashOtherPayments}
         onChanged={() => router.refresh()}
       />
     </div>

@@ -33,6 +33,8 @@ export default async function CajaPage({
     { data: users, error: usersError },
     { data: ordersToday, error: ordersError },
     { data: cashRegisterYesterday, error: cashYesterdayError },
+    { data: cashCardPayments, error: cashCardPaymentsError },
+    { data: cashOtherPayments, error: cashOtherPaymentsError },
   ] = await Promise.all([
     supabase.from("cash_register").select("*").eq("date", date).maybeSingle(),
     supabase.from("cash_register_purchases").select("*").eq("date", date),
@@ -40,9 +42,20 @@ export default async function CajaPage({
     supabase.from("users").select("id, name"),
     supabase.from("orders").select("total").gte("created_at", dayRange.start).lte("created_at", dayRange.end),
     supabase.from("cash_register").select("*").eq("date", yesterday).maybeSingle(),
+    supabase.from("cash_register_card_payments").select("*").eq("date", date),
+    supabase.from("cash_register_other_payments").select("*").eq("date", date),
   ]);
 
-  for (const [label, error] of Object.entries({ cashError, cashPurchasesError, cashAidError, usersError, ordersError, cashYesterdayError })) {
+  for (const [label, error] of Object.entries({
+    cashError,
+    cashPurchasesError,
+    cashAidError,
+    usersError,
+    ordersError,
+    cashYesterdayError,
+    cashCardPaymentsError,
+    cashOtherPaymentsError,
+  })) {
     logSupabaseError(`CajaPage ${label}`, error);
   }
 
@@ -55,6 +68,8 @@ export default async function CajaPage({
       users={users ?? []}
       ventasHoy={(ordersToday ?? []).reduce((s, o) => s + o.total, 0)}
       cashRegisterYesterday={cashRegisterYesterday}
+      cashCardPayments={cashCardPayments ?? []}
+      cashOtherPayments={cashOtherPayments ?? []}
     />
   );
 }

@@ -28,7 +28,7 @@ export default async function InventarioPage() {
   // -> users) que es más frágil de que PostgREST lo resuelva bien.
   const { data: items, error: itemsError } = await supabase
     .from("items")
-    .select("id, name, category, mode, unit, step, min, item_status(status_gauge, qty, updated_at, updated_by)")
+    .select("id, name, category, mode, unit, step, min, gauge_capacity_ml, item_status(status_gauge, qty, updated_at, updated_by)")
     .in("category", categoryIds)
     .order("name");
   logSupabaseError("InventarioPage items", itemsError);

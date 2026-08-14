@@ -27,6 +27,15 @@ export function nextStatusKey(key: StatusGaugeKey | null | undefined): StatusGau
   return STATUS_LEVELS[(idx + 1) % STATUS_LEVELS.length].key;
 }
 
+// Equivalente en ml de un nivel, para barriles con capacidad conocida
+// (items.gauge_capacity_ml) — mantiene gauge_consumed_ml consistente cuando
+// alguien cambia el nivel a mano en Inventario, ya que register_order/
+// void_order derivan el nivel siempre de ese contador (ver esas funciones).
+export function mlForLevel(key: StatusGaugeKey, capacityMl: number): number {
+  const idx = STATUS_LEVELS.findIndex((l) => l.key === key);
+  return Math.round((idx / (STATUS_LEVELS.length - 1)) * capacityMl);
+}
+
 export function isCriticalGauge(key: StatusGaugeKey | null | undefined): boolean {
   return key === "agotado" || key === "un_cuarto";
 }

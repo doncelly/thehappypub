@@ -180,6 +180,7 @@ create table public.items (
   step        numeric,
   min         numeric,
   active      boolean not null default true,
+  gauge_capacity_ml  integer, -- solo items mode='gauge' con capacidad real conocida (ver barriles de cerveza artesanal) — habilita el descuento automático por volumen vendido
   constraint items_qty_fields_chk check (
     (mode = 'gauge' and unit is null and step is null) or
     (mode = 'qty' and unit is not null and step is not null and min is not null)
@@ -191,6 +192,7 @@ create table public.item_status (
   item_id       text primary key references public.items(id),
   status_gauge  text check (status_gauge in ('completo','tres_cuartos','mitad','un_cuarto','agotado')),
   qty           numeric,
+  gauge_consumed_ml  integer not null default 0, -- ml acumulados desde el último nivel confirmado (manual o automático) — solo relevante si items.gauge_capacity_ml no es null
   updated_by    uuid references public.users(id),
   updated_at    timestamptz not null default now(),
   constraint item_status_mode_chk check (
@@ -475,6 +477,7 @@ create table public.cash_register (
   close_time            time,
   cash_amount           numeric,
   card_amount           numeric,
+  other_payment_amount  numeric,
   remnant_accumulated   numeric,
   next_base             numeric,
   last_table            text,
@@ -498,6 +501,24 @@ create table public.cash_register_transport_aid (
   amount        numeric not null check (amount > 0)
 );
 comment on table public.cash_register_transport_aid is 'day.caja.auxilios[] del original — auxilios de transporte.';
+
+create table public.cash_register_card_payments (
+  id       bigint generated always as identity primary key,
+  date     date not null references public.cash_register(date) on delete cascade,
+  concept  text,
+  amount   numeric not null check (amount > 0)
+);
+comment on table public.cash_register_card_payments is
+  'Recibos de pago con tarjeta del día, uno por transacción — se suman para cash_register.card_amount al cerrar caja (antes era un solo número escrito a mano).';
+
+create table public.cash_register_other_payments (
+  id       bigint generated always as identity primary key,
+  date     date not null references public.cash_register(date) on delete cascade,
+  concept  text,
+  amount   numeric not null check (amount > 0)
+);
+comment on table public.cash_register_other_payments is
+  'Recibos de otros medios de pago del día (transferencia, Nequi, etc.), uno por transacción — se suman para cash_register.other_payment_amount al cerrar caja.';
 
 -- ============================================================================
 -- 12. CALIFICACIÓN DE SERVICIO (QR público) Y VENCIMIENTOS
@@ -677,6 +698,9 @@ declare
   v_discount_pct numeric;
   v_discount_cat text;
   v_actor_name text;
+  v_gauge_item record;
+  v_gauge_capacity int;
+  v_gauge_consumed int;
 begin
   if v_user_id is null or v_role not in ('jefe', 'mesero') then
     raise exception 'Solo jefe o mesero pueden registrar pedidos.';
@@ -736,6 +760,40 @@ begin
   -- (el trigger trg_item_status_audit/stock_history/activity ya vigente sobre
   -- item_status se dispara solo con este UPDATE — no hay que repetir esa lógica)
 
+  -- Descuenta barriles (mode='gauge' con capacidad conocida) por volumen
+  -- vendido (ver cerveza artesanal — menu_item_ingredients.qty guarda ml en
+  -- vez de unidades para estos). El nivel del gauge se deriva siempre del
+  -- total de ml acumulado, nunca se resta paso a paso — así queda consistente
+  -- con lo que haga la persona manualmente en Inventario (ver InventarioClient,
+  -- que también escribe gauge_consumed_ml al cambiar el nivel a mano).
+  for v_gauge_item in
+    select mii.item_id, sum(mii.qty * oi.qty)::int as total_ml
+    from public.order_items oi
+    join public.menu_item_ingredients mii on mii.menu_item_id = oi.menu_item_id
+    join public.items i on i.id = mii.item_id
+    where oi.order_id = v_order_id and i.gauge_capacity_ml is not null
+    group by mii.item_id
+  loop
+    select i.gauge_capacity_ml, coalesce(ist.gauge_consumed_ml, 0)
+      into v_gauge_capacity, v_gauge_consumed
+      from public.items i
+      join public.item_status ist on ist.item_id = i.id
+      where i.id = v_gauge_item.item_id;
+
+    v_gauge_consumed := v_gauge_consumed + v_gauge_item.total_ml;
+
+    update public.item_status
+    set gauge_consumed_ml = v_gauge_consumed,
+        status_gauge = case least(4, v_gauge_consumed / greatest(1, v_gauge_capacity / 4))
+          when 0 then 'completo'
+          when 1 then 'tres_cuartos'
+          when 2 then 'mitad'
+          when 3 then 'un_cuarto'
+          else 'agotado'
+        end
+    where item_id = v_gauge_item.item_id;
+  end loop;
+
   delete from public.table_locks where table_label = p_table_label and user_id = v_user_id;
 
   insert into public.activity_log (message, color)
@@ -753,7 +811,7 @@ begin
 end;
 $$;
 comment on function public.register_order is
-  'RPC para Vender: crea orders+order_items, descuenta item_status.qty según la receta, libera la mesa y registra actividad — todo en una transacción.';
+  'RPC para Vender: crea orders+order_items, descuenta item_status.qty (o gauge por volumen si items.gauge_capacity_ml está seteado — ver cerveza artesanal) según la receta, libera la mesa y registra actividad — todo en una transacción.';
 
 grant execute on function public.register_order(text, jsonb) to authenticated;
 
@@ -776,6 +834,9 @@ declare
   v_user_id uuid := public.current_user_id();
   v_order public.orders%rowtype;
   v_actor_name text;
+  v_gauge_item record;
+  v_gauge_capacity int;
+  v_gauge_consumed int;
 begin
   if v_user_id is null then
     raise exception 'Debes iniciar sesión.';
@@ -803,6 +864,37 @@ begin
   ) deltas
   where ist.item_id = deltas.item_id and ist.qty is not null;
 
+  -- Reverso simétrico del descuento por volumen de register_order (ver ahí
+  -- el porqué de derivar el nivel siempre del total acumulado en vez de
+  -- restar paso a paso).
+  for v_gauge_item in
+    select mii.item_id, sum(mii.qty * oi.qty)::int as total_ml
+    from public.order_items oi
+    join public.menu_item_ingredients mii on mii.menu_item_id = oi.menu_item_id
+    join public.items i on i.id = mii.item_id
+    where oi.order_id = p_order_id and i.gauge_capacity_ml is not null
+    group by mii.item_id
+  loop
+    select i.gauge_capacity_ml, coalesce(ist.gauge_consumed_ml, 0)
+      into v_gauge_capacity, v_gauge_consumed
+      from public.items i
+      join public.item_status ist on ist.item_id = i.id
+      where i.id = v_gauge_item.item_id;
+
+    v_gauge_consumed := greatest(0, v_gauge_consumed - v_gauge_item.total_ml);
+
+    update public.item_status
+    set gauge_consumed_ml = v_gauge_consumed,
+        status_gauge = case least(4, v_gauge_consumed / greatest(1, v_gauge_capacity / 4))
+          when 0 then 'completo'
+          when 1 then 'tres_cuartos'
+          when 2 then 'mitad'
+          when 3 then 'un_cuarto'
+          else 'agotado'
+        end
+    where item_id = v_gauge_item.item_id;
+  end loop;
+
   insert into public.activity_log (message, color)
   values (
     format(
@@ -818,7 +910,7 @@ begin
 end;
 $$;
 comment on function public.void_order is
-  'RPC para Vender: anula un pedido — restaura item_status.qty según la receta, registra actividad, y borra el pedido (order_items en cascada). Jefe anula cualquiera; mesero solo los suyos.';
+  'RPC para Vender: anula un pedido — restaura item_status.qty (o gauge por volumen) según la receta, registra actividad, y borra el pedido (order_items en cascada). Jefe anula cualquiera; mesero solo los suyos.';
 
 grant execute on function public.void_order(uuid) to authenticated;
 
@@ -1134,6 +1226,8 @@ alter table public.losses enable row level security;
 alter table public.cash_register enable row level security;
 alter table public.cash_register_purchases enable row level security;
 alter table public.cash_register_transport_aid enable row level security;
+alter table public.cash_register_card_payments enable row level security;
+alter table public.cash_register_other_payments enable row level security;
 alter table public.service_ratings enable row level security;
 alter table public.utility_bills enable row level security;
 alter table public.activity_log enable row level security;
@@ -1377,6 +1471,12 @@ create policy "cash_register_purchases: crud jefe y mesero" on public.cash_regis
   using (public.is_jefe() or public.current_user_role() = 'mesero')
   with check (public.is_jefe() or public.current_user_role() = 'mesero');
 create policy "cash_register_transport_aid: crud jefe y mesero" on public.cash_register_transport_aid for all to authenticated
+  using (public.is_jefe() or public.current_user_role() = 'mesero')
+  with check (public.is_jefe() or public.current_user_role() = 'mesero');
+create policy "cash_register_card_payments: crud jefe y mesero" on public.cash_register_card_payments for all to authenticated
+  using (public.is_jefe() or public.current_user_role() = 'mesero')
+  with check (public.is_jefe() or public.current_user_role() = 'mesero');
+create policy "cash_register_other_payments: crud jefe y mesero" on public.cash_register_other_payments for all to authenticated
   using (public.is_jefe() or public.current_user_role() = 'mesero')
   with check (public.is_jefe() or public.current_user_role() = 'mesero');
 

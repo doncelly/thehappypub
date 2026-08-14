@@ -66,7 +66,7 @@ export default async function PanelPage() {
     supabase.from("users").select("id, name"),
     supabase.from("monthly_goal_settings").select("min_goal").eq("id", 1).maybeSingle(),
     supabase.from("orders").select("total").gte("created_at", monthRange.start).lte("created_at", monthRange.end),
-    supabase.from("cash_register").select("cash_amount, card_amount, close_time").eq("date", yesterday).maybeSingle(),
+    supabase.from("cash_register").select("cash_amount, card_amount, other_payment_amount, close_time").eq("date", yesterday).maybeSingle(),
     supabase.from("orders").select("total").gte("created_at", yesterdayRange.start).lte("created_at", yesterdayRange.end),
   ]);
 
@@ -94,7 +94,8 @@ export default async function PanelPage() {
   const cajaAyerDiferencia =
     cashRegisterYesterday?.cash_amount != null
       ? Number(cashRegisterYesterday.cash_amount) +
-        Number(cashRegisterYesterday.card_amount ?? 0) -
+        Number(cashRegisterYesterday.card_amount ?? 0) +
+        Number(cashRegisterYesterday.other_payment_amount ?? 0) -
         (ordersYesterday ?? []).reduce((s, o) => s + o.total, 0)
       : null;
 
