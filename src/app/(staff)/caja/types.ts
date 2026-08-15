@@ -23,4 +23,5 @@ export type CashPurchase = { id: number; date: string; concept: string; amount: 
 export type CashTransportAid = { id: number; date: string; collaborator: string; amount: number };
 export type CashCardPayment = { id: number; date: string; concept: string | null; amount: number };
 export type CashOtherPayment = { id: number; date: string; concept: string | null; amount: number };
+export type CashCashPayment = { id: number; date: string; concept: string | null; amount: number };
 export type UserRow = { id: string; name: string };

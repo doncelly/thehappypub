@@ -35,6 +35,7 @@ export default async function CajaPage({
     { data: cashRegisterYesterday, error: cashYesterdayError },
     { data: cashCardPayments, error: cashCardPaymentsError },
     { data: cashOtherPayments, error: cashOtherPaymentsError },
+    { data: cashCashPayments, error: cashCashPaymentsError },
   ] = await Promise.all([
     supabase.from("cash_register").select("*").eq("date", date).maybeSingle(),
     supabase.from("cash_register_purchases").select("*").eq("date", date),
@@ -44,6 +45,7 @@ export default async function CajaPage({
     supabase.from("cash_register").select("*").eq("date", yesterday).maybeSingle(),
     supabase.from("cash_register_card_payments").select("*").eq("date", date),
     supabase.from("cash_register_other_payments").select("*").eq("date", date),
+    supabase.from("cash_register_cash_payments").select("*").eq("date", date),
   ]);
 
   for (const [label, error] of Object.entries({
@@ -55,6 +57,7 @@ export default async function CajaPage({
     cashYesterdayError,
     cashCardPaymentsError,
     cashOtherPaymentsError,
+    cashCashPaymentsError,
   })) {
     logSupabaseError(`CajaPage ${label}`, error);
   }
@@ -70,6 +73,7 @@ export default async function CajaPage({
       cashRegisterYesterday={cashRegisterYesterday}
       cashCardPayments={cashCardPayments ?? []}
       cashOtherPayments={cashOtherPayments ?? []}
+      cashCashPayments={cashCashPayments ?? []}
     />
   );
 }

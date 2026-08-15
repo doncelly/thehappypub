@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { fmtCOP } from "@/lib/format";
 import { Section, EmptyState, FieldLabel, inputCls, MiniButton } from "@/components/panel-ui";
-import type { CashRegister, CashPurchase, CashTransportAid, CashCardPayment, CashOtherPayment } from "./types";
+import type { CashRegister, CashPurchase, CashTransportAid, CashCardPayment, CashOtherPayment, CashCashPayment } from "./types";
 
 type Props = {
   date: string;
@@ -15,8 +15,20 @@ type Props = {
   cashRegisterYesterday: CashRegister;
   cardPayments: CashCardPayment[];
   otherPayments: CashOtherPayment[];
+  cashPayments: CashCashPayment[];
   onChanged: () => void;
 };
+
+// Enter en el campo de valor agrega el ítem, igual que tocar el botón —
+// evita tener que soltar el teclado numérico del celular para tocar "+ Agregar".
+function onEnterAdd(fn: () => void) {
+  return (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      fn();
+    }
+  };
+}
 
 export function CajaSection({
   date,
@@ -27,6 +39,7 @@ export function CajaSection({
   cashRegisterYesterday: y,
   cardPayments,
   otherPayments,
+  cashPayments,
   onChanged,
 }: Props) {
   const supabase = createClient();
@@ -38,7 +51,6 @@ export function CajaSection({
   const [observaciones, setObservaciones] = useState(c?.observations ?? "");
   const [cierreResp, setCierreResp] = useState(c?.close_by ?? "");
   const [cierreHora, setCierreHora] = useState(c?.close_time?.slice(0, 5) ?? "");
-  const [efectivo, setEfectivo] = useState(c?.cash_amount != null ? String(c.cash_amount) : "");
   const [remanenteAcum, setRemanenteAcum] = useState(c?.remnant_accumulated != null ? String(c.remnant_accumulated) : "");
   const [baseSiguiente, setBaseSiguiente] = useState(c?.next_base != null ? String(c.next_base) : "");
   const [ultimaMesa, setUltimaMesa] = useState(c?.last_table ?? "");
@@ -60,12 +72,15 @@ export function CajaSection({
   const [cardValor, setCardValor] = useState("");
   const [otroConcepto, setOtroConcepto] = useState("");
   const [otroValor, setOtroValor] = useState("");
+  const [cashConcepto, setCashConcepto] = useState("");
+  const [cashValor, setCashValor] = useState("");
 
   const comprasTotal = purchases.reduce((s, p) => s + p.amount, 0);
   const auxiliosTotal = transportAid.reduce((s, a) => s + a.amount, 0);
   const cardPaymentsTotal = cardPayments.reduce((s, p) => s + p.amount, 0);
   const otherPaymentsTotal = otherPayments.reduce((s, p) => s + p.amount, 0);
-  const totalVentas = (Number(efectivo) || 0) + cardPaymentsTotal + otherPaymentsTotal;
+  const cashPaymentsTotal = cashPayments.reduce((s, p) => s + p.amount, 0);
+  const totalVentas = cashPaymentsTotal + cardPaymentsTotal + otherPaymentsTotal;
   const diferencia = totalVentas - ventasHoy;
 
   async function ensureRow() {
@@ -105,7 +120,7 @@ export function CajaSection({
         date,
         close_by: cierreResp.trim() || null,
         close_time: cierreHora || null,
-        cash_amount: efectivo ? Number(efectivo) : null,
+        cash_amount: cashPaymentsTotal || null,
         card_amount: cardPaymentsTotal || null,
         other_payment_amount: otherPaymentsTotal || null,
         remnant_accumulated: remanenteAcum ? Number(remanenteAcum) : null,
@@ -216,6 +231,29 @@ export function CajaSection({
     onChanged();
   }
 
+  async function addCashPayment() {
+    const valor = Number(cashValor);
+    if (!valor || valor <= 0) return;
+    await ensureRow();
+    const { error } = await supabase.from("cash_register_cash_payments").insert({ date, concept: cashConcepto.trim() || null, amount: valor });
+    if (error) {
+      showToast(`No se pudo agregar el conteo: ${error.message}`, true);
+      return;
+    }
+    setCashConcepto("");
+    setCashValor("");
+    onChanged();
+  }
+
+  async function deleteCashPayment(id: number) {
+    const { error } = await supabase.from("cash_register_cash_payments").delete().eq("id", id);
+    if (error) {
+      showToast(`No se pudo borrar el conteo: ${error.message}`, true);
+      return;
+    }
+    onChanged();
+  }
+
   return (
     <>
       {y && y.close_time && (
@@ -287,10 +325,43 @@ export function CajaSection({
               <input type="time" value={cierreHora} onChange={(e) => setCierreHora(e.target.value)} className={`${inputCls} min-w-0 appearance-none`} />
             </div>
           </div>
-          <div>
-            <FieldLabel>Pagos en efectivo del día ($)</FieldLabel>
-            <input type="number" value={efectivo} onChange={(e) => setEfectivo(e.target.value)} placeholder="Ej: 91000" className={inputCls} />
+          <div className="mt-2 font-accent text-[15px]">Efectivo</div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <FieldLabel>Concepto (opcional)</FieldLabel>
+              <input value={cashConcepto} onChange={(e) => setCashConcepto(e.target.value)} placeholder="Ej: Conteo caja" className={inputCls} />
+            </div>
+            <div>
+              <FieldLabel>Valor ($)</FieldLabel>
+              <input
+                type="number"
+                value={cashValor}
+                onChange={(e) => setCashValor(e.target.value)}
+                onKeyDown={onEnterAdd(addCashPayment)}
+                placeholder="Ej: 91000"
+                className={inputCls}
+              />
+            </div>
           </div>
+          <MiniButton onClick={addCashPayment}>+ Agregar efectivo</MiniButton>
+          {cashPayments.length === 0 ? (
+            <EmptyState text="Sin efectivo registrado." />
+          ) : (
+            <div className="space-y-1.5">
+              {cashPayments.map((p) => (
+                <div key={p.id} className="rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-[11px]">
+                  <div>{p.concept || "—"}</div>
+                  <div className="mt-1 flex items-center justify-end gap-1.5">
+                    <span className="font-mono">{fmtCOP(p.amount)}</span>
+                    <MiniButton variant="danger" onClick={() => deleteCashPayment(p.id)}>
+                      ✕
+                    </MiniButton>
+                  </div>
+                </div>
+              ))}
+              <div className="text-right text-[11px] font-bold">Total efectivo: {fmtCOP(cashPaymentsTotal)}</div>
+            </div>
+          )}
 
           <div className="mt-2 font-accent text-[15px]">Pagos con tarjeta</div>
           <div className="grid grid-cols-2 gap-2.5">
@@ -300,7 +371,14 @@ export function CajaSection({
             </div>
             <div>
               <FieldLabel>Valor ($)</FieldLabel>
-              <input type="number" value={cardValor} onChange={(e) => setCardValor(e.target.value)} placeholder="Ej: 91000" className={inputCls} />
+              <input
+                type="number"
+                value={cardValor}
+                onChange={(e) => setCardValor(e.target.value)}
+                onKeyDown={onEnterAdd(addCardPayment)}
+                placeholder="Ej: 91000"
+                className={inputCls}
+              />
             </div>
           </div>
           <MiniButton onClick={addCardPayment}>+ Agregar pago con tarjeta</MiniButton>
@@ -331,7 +409,14 @@ export function CajaSection({
             </div>
             <div>
               <FieldLabel>Valor ($)</FieldLabel>
-              <input type="number" value={otroValor} onChange={(e) => setOtroValor(e.target.value)} placeholder="Ej: 30000" className={inputCls} />
+              <input
+                type="number"
+                value={otroValor}
+                onChange={(e) => setOtroValor(e.target.value)}
+                onKeyDown={onEnterAdd(addOtherPayment)}
+                placeholder="Ej: 30000"
+                className={inputCls}
+              />
             </div>
           </div>
           <MiniButton onClick={addOtherPayment}>+ Agregar otro medio de pago</MiniButton>
@@ -366,7 +451,14 @@ export function CajaSection({
             </div>
             <div>
               <FieldLabel>Valor ($)</FieldLabel>
-              <input type="number" value={compraValor} onChange={(e) => setCompraValor(e.target.value)} placeholder="Ej: 19800" className={inputCls} />
+              <input
+                type="number"
+                value={compraValor}
+                onChange={(e) => setCompraValor(e.target.value)}
+                onKeyDown={onEnterAdd(addCompra)}
+                placeholder="Ej: 19800"
+                className={inputCls}
+              />
             </div>
           </div>
           <MiniButton onClick={addCompra}>+ Agregar compra</MiniButton>
@@ -396,7 +488,14 @@ export function CajaSection({
             </div>
             <div>
               <FieldLabel>Valor ($)</FieldLabel>
-              <input type="number" value={auxValor} onChange={(e) => setAuxValor(e.target.value)} placeholder="Ej: 20000" className={inputCls} />
+              <input
+                type="number"
+                value={auxValor}
+                onChange={(e) => setAuxValor(e.target.value)}
+                onKeyDown={onEnterAdd(addAux)}
+                placeholder="Ej: 20000"
+                className={inputCls}
+              />
             </div>
           </div>
           <MiniButton onClick={addAux}>+ Agregar auxilio</MiniButton>

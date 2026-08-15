@@ -185,12 +185,17 @@ Pega este archivo completo como primer mensaje. El asistente debe:
 - **Paso 19** — Cerveza artesanal vendible con descuento automático de
   barril por volumen (ver punto 19 de "Qué falta", patch 0023) + pagos con
   tarjeta/otros medios itemizados en Caja (ver punto 20, patch 0022).
+- **Paso 20** — Módulo Resumen de Panel completado según spec del usuario
+  (aprovisionamiento Bajo/Medio/Alto × Cocina/Barra/Total, ventas por mesa,
+  export PDF/CSV del módulo) + efectivo itemizado y Enter-para-agregar en
+  Caja (patch 0024) + aseo/desechables/comida de cocina en Inventario
+  (patch 0025). Ver punto 21-23 de "Qué falta".
 
 ## Migraciones SQL — MUY IMPORTANTE
 
 `supabase/schema.sql` y `supabase/seed.sql` son la fuente de verdad para
 **instalaciones nuevas**. El proyecto Supabase real del usuario se actualiza
-con patches incrementales en `supabase/patches/` (0001 a 0023, todos
+con patches incrementales en `supabase/patches/` (0001 a 0025, todos
 idempotentes — ver error real #16 sobre qué tan en serio hay que tomarse
 "idempotente"). Archivo combinado:
 
@@ -449,19 +454,67 @@ antes de asumir**, no inventar reglas.
     Pedidos a proveedor, Calendario — cada uno con export PDF/CSV). Gran
     parte ya existe bajo otro nombre (Panel≈Resumen, Mi día≈Mi turno,
     Agenda≈Programación, Checklist≈Auditoría de alistamiento, Caja, Perdidas,
-    Recibidos≈Pedidos). Lo genuinamente nuevo: exports PDF/CSV por módulo,
-    "Módulo de Pagos" (arriendo/servicios/nómina/propinas con comprobante
-    adjunto — esto sí es nuevo, no existe), calificación de Auditoría como
-    % de cumplimiento (hoy es Listo/Pendiente, no %). **No se tocó código
-    todavía** — es demasiado grande para una tanda, necesita su propia
-    conversación para decidir qué construir y qué ya está cubierto.
+    Recibidos≈Pedidos).
+    - ✅ **Módulo Resumen** (13-14 ago 2026) — reordenado y completado en
+      Panel para calzar exacto con el orden pedido: Personal en sitio hoy
+      (con entrada Y salida — antes solo mostraba quién seguía presente,
+      ahora todo el que marcó llegada hoy), Meta de ventas hoy, Meta de
+      ventas semana actual, **Aprovisionamiento del sitio hoy en 3 niveles
+      Bajo/Medio/Alto (formato actual/total) separado por Cocina, Barra y
+      Total general** (antes era un solo total de 2 niveles combinado — ver
+      `tierOf`/`tierCounts` en `PanelClient.tsx`: gauge usa agotado+un_cuarto
+      =bajo/mitad=medio/tres_cuartos+completo=alto; qty sin `min` no
+      califica = alto, con `min` es heurística qty≤min=bajo,
+      qty≤2×min=medio — no hay un "medio" real en el catálogo, es una
+      convención nueva, avisar si no calza con la realidad), Últimas
+      actividades del equipo de hoy, **Ventas por mesa hoy** (nuevo —
+      antes solo había "Pedidos recientes" sin agrupar/sumar por mesa,
+      que se dejó más abajo como detalle aparte), y botones nuevos
+      **"Descargar Resumen (PDF)"/"(CSV)"** con toda la data de este
+      módulo específicamente (`generateResumenPdf`/`exportResumenCsv` en
+      `panel/reports.ts` — no toca la base, arma el archivo con lo que ya
+      está cargado en el cliente). No se tocó ni se borró nada del resto
+      de Panel (checklist del día, meta mensual, alerta de descuadre,
+      Barra y Cocina — qué hay, Productos que faltan, stock semanal,
+      reporte semanal financiero) — el usuario había pedido "borra y
+      reescribe todo" en un texto genérico pegado de otra fuente, se le
+      explicó el riesgo y se acotó a esto. Probado en vivo con cuenta jefe
+      temporal (ya borrada): datos reales, botones de descarga sin error.
+    - Lo genuinamente nuevo del resto del documento, sin construir
+      todavía: exports PDF/CSV para los demás módulos (Mi turno,
+      Programación, Auditoría, Caja, Inventario), "Módulo de Pagos"
+      (arriendo/servicios/nómina/propinas con comprobante adjunto — esto
+      sí no existe en ningún lado), calificación de Auditoría como % de
+      cumplimiento (hoy es Listo/Pendiente, no %). Preguntar cuál sigue,
+      si alguno.
+22. ✅ **Caja: efectivo itemizado + Enter para agregar** — hecho (14 ago
+    2026). "Pagos en efectivo del día" (antes un solo número escrito a
+    mano) pasa al mismo patrón que tarjetas/otros medios de pago (patch
+    0022): lista de conteos que la app suma sola. Patch 0024
+    (`cash_register_cash_payments`). Además, los 5 formularios de "agregar
+    ítem" en Caja (efectivo, tarjetas, otros medios, compras, auxilios)
+    ahora agregan con Enter en el campo de valor, no solo tocando el botón
+    — `onEnterAdd` en `CajaSection.tsx`. Probado en vivo: Enter agrega
+    correctamente sin tocar el botón.
+23. ✅ **Inventario cocina: aseo + desechables + 2 items de comida** —
+    hecho. Dos categorías nuevas domain='cocina' (antes cocinero no tenía
+    ninguna categoría de aseo propia — la existente "Aseo e Insumos" es
+    domain='mesas', invisible para cocinero por RLS): 🧽 Aseo Cocina
+    (jabón loza desengrasante, jabón en polvo, Sabras, Clorox) y
+    📦 Desechables (contenedores para llevar, palillos largos, papel
+    graso, cucharitas desechables, copitas desechables, bolsas para
+    llevar) — todos `mode: 'gauge'`, mismo patrón que "Aseo e Insumos" ya
+    tenía. Más "Crema de leche" en la categoría Cocina existente
+    (`mode: 'qty'`). "Queso azul" NO se agregó — el usuario confirmó que
+    es el mismo que ya existe (`queso_azul_cocina`, "Queso Azul (para
+    salsa)"). Patch 0025.
 
 ### Notas para retomar
 
 - Pendientes de respuesta del usuario: 17 (motivo predefinido para bajas de
-  cocina, sí o no), 21 (qué construir del documento de observaciones, si
-  algo). Todo lo demás del backlog original ya quedó resuelto u omitido a
-  pedido del usuario (punto 5).
+  cocina, sí o no), 21 (qué más construir del documento de observaciones,
+  si algo — el Módulo Resumen ya quedó hecho). Todo lo demás del backlog
+  original ya quedó resuelto u omitido a pedido del usuario (punto 5).
 - Los puntos 6, 9, 16 se pueden resolver revisando/mejorando lo que ya
   existe, sin necesitar tanta info nueva del usuario.
 - Dado el volumen, conviene ir en tandas chicas y confirmar con el usuario

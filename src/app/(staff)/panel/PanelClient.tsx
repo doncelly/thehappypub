@@ -7,7 +7,7 @@ import { levelOf, type StatusGaugeKey } from "@/lib/constants/status-levels";
 import { fmtCOP, fmtDateShort, fmtDateLabel, fmtHM, fmtQty, fmtRelTime, bogotaDateOf } from "@/lib/format";
 import { Section, EmptyState, Row, MiniButton } from "@/components/panel-ui";
 import { APERTURA_ITEMS, CIERRE_ITEMS, allChecked } from "@/lib/constants/checklist-areas";
-import { generateWeeklyReportPdf, exportCajaCsv } from "./reports";
+import { generateWeeklyReportPdf, exportCajaCsv, generateResumenPdf, exportResumenCsv } from "./reports";
 
 type CategoryRow = { id: string; label: string; domain: string; sort_order: number };
 
@@ -63,6 +63,36 @@ type Props = {
   reportsByYear: Record<string, { date: string; url: string }[]>;
 };
 
+
+// gauge: agotado+un_cuarto=bajo, mitad=medio, tres_cuartos+completo=alto.
+// qty: sin min no se puede calificar (se cuenta como alto, no hay piso definido);
+// con min, bajo = qty<=min, medio = qty<=2×min (heurística de punto de
+// reorden, no hay un "medio" real en el catálogo), alto = el resto.
+function tierOf(it: ItemRow): "bajo" | "medio" | "alto" {
+  if (it.mode === "gauge") {
+    const g = it.item_status.status_gauge;
+    if (g === "agotado" || g === "un_cuarto") return "bajo";
+    if (g === "mitad") return "medio";
+    return "alto";
+  }
+  if (it.min == null) return "alto";
+  const qty = it.item_status.qty ?? 0;
+  if (qty <= it.min) return "bajo";
+  if (qty <= it.min * 2) return "medio";
+  return "alto";
+}
+function tierCounts(list: ItemRow[]) {
+  let bajo = 0;
+  let medio = 0;
+  let alto = 0;
+  for (const it of list) {
+    const t = tierOf(it);
+    if (t === "bajo") bajo++;
+    else if (t === "medio") medio++;
+    else alto++;
+  }
+  return { bajo, medio, alto, total: list.length };
+}
 
 export function PanelClient(props: Props) {
   const { categories, weekDays, users, currentUserName } = props;
@@ -124,6 +154,46 @@ export function PanelClient(props: Props) {
     } finally {
       setExportingCsv(false);
     }
+  }
+
+  const [generatingResumenPdf, setGeneratingResumenPdf] = useState(false);
+
+  async function onDownloadResumenPdf() {
+    setGeneratingResumenPdf(true);
+    showReportToast("Generando PDF…");
+    try {
+      await generateResumenPdf({
+        today: props.today,
+        personalHoy,
+        ventasHoy,
+        dailyGoal: props.dailyGoal,
+        ventasSemana,
+        weeklyGoal: props.weeklyGoal,
+        aprovisionamiento,
+        actividad: activity,
+        ventasPorMesa,
+      });
+      showReportToast("PDF descargado ✓");
+    } catch {
+      showReportToast("No se pudo generar el PDF");
+    } finally {
+      setGeneratingResumenPdf(false);
+    }
+  }
+
+  function onExportResumenCsv() {
+    exportResumenCsv({
+      today: props.today,
+      personalHoy,
+      ventasHoy,
+      dailyGoal: props.dailyGoal,
+      ventasSemana,
+      weeklyGoal: props.weeklyGoal,
+      aprovisionamiento,
+      actividad: activity,
+      ventasPorMesa,
+    });
+    showReportToast("CSV descargado ✓");
   }
 
   async function onSyncCajaSheet() {
@@ -204,33 +274,37 @@ export function PanelClient(props: Props) {
     };
   }, [supabase, usersById, props.today]);
 
-  // ---- inventario: críticos / ok / % aprovisionado / faltantes ----
-  const { criticalCount, okCount, aprovPct, faltantes } = useMemo(() => {
-    let critical = 0;
-    const missing: ItemRow[] = [];
-    for (const it of items) {
-      if (isCriticalItem(it.mode, it.min, it.item_status)) {
-        critical++;
-        missing.push(it);
-      }
-    }
-    const total = items.length || 1;
-    return {
-      criticalCount: critical,
-      okCount: items.length - critical,
-      aprovPct: Math.round(((items.length - critical) / total) * 100),
-      faltantes: missing,
-    };
-  }, [items]);
+  // ---- inventario: faltantes (para la sección "Productos que faltan") ----
+  const faltantes = useMemo(() => items.filter((it) => isCriticalItem(it.mode, it.min, it.item_status)), [items]);
 
-  // ---- personal en sitio ahora ----
-  const personalEnSitio = attendance
-    .filter((a) => a.check_in && !a.check_out)
-    .map((a) => ({ name: usersById[a.user_id] ?? "—", since: a.check_in }));
+  // ---- aprovisionamiento por tercio (Bajo/Medio/Alto), para Cocina/Barra/Total ----
+  const aprovisionamiento = {
+    cocina: tierCounts(items.filter((it) => it.category === "cocina")),
+    barra: tierCounts(items.filter((it) => it.category === "barra")),
+    total: tierCounts(items),
+  };
+
+  // ---- personal en sitio hoy (entrada y salida de TODOS los turnos de hoy, no solo quien sigue presente) ----
+  const personalHoy = attendance.map((a) => ({ name: usersById[a.user_id] ?? "—", entrada: a.check_in, salida: a.check_out }));
 
   // ---- ventas hoy / semana ----
-  const ventasHoy = orders.filter((o) => bogotaDateOf(o.created_at) === props.today).reduce((s, o) => s + o.total, 0);
+  const ordersHoy = orders.filter((o) => bogotaDateOf(o.created_at) === props.today);
+  const ventasHoy = ordersHoy.reduce((s, o) => s + o.total, 0);
   const ventasSemana = orders.reduce((s, o) => s + o.total, 0);
+
+  // ---- ventas por mesa hoy ----
+  const ventasPorMesa = useMemo(() => {
+    const map: Record<string, { total: number; pedidos: number }> = {};
+    for (const o of ordersHoy) {
+      const m = (map[o.table_label] ??= { total: 0, pedidos: 0 });
+      m.total += o.total;
+      m.pedidos += 1;
+    }
+    return Object.entries(map)
+      .map(([mesa, v]) => ({ mesa, ...v }))
+      .sort((a, b) => b.total - a.total);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ordersHoy se recalcula cada render desde orders, no hace falta en deps
+  }, [orders, props.today]);
 
   // ---- pares a vigilar ----
   const qtyByItemId = useMemo(() => {
@@ -293,13 +367,17 @@ export function PanelClient(props: Props) {
         </div>
       )}
 
-      <Section title="Personal en sitio ahora">
-        {personalEnSitio.length === 0 ? (
-          <EmptyState text="Nadie marcado como presente ahora mismo." />
+      <Section title="Personal en sitio hoy">
+        {personalHoy.length === 0 ? (
+          <EmptyState text="Nadie ha marcado llegada hoy todavía." />
         ) : (
           <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2 xl:grid-cols-3">
-            {personalEnSitio.map((p, i) => (
-              <Row key={i} left={`🟢 ${p.name}`} right={`desde ${fmtHM(p.since)}`} />
+            {personalHoy.map((p, i) => (
+              <Row
+                key={i}
+                left={`${p.salida ? "⚪" : "🟢"} ${p.name}`}
+                right={`Entrada ${fmtHM(p.entrada)} · Salida ${p.salida ? fmtHM(p.salida) : "—"}`}
+              />
             ))}
           </div>
         )}
@@ -333,10 +411,58 @@ export function PanelClient(props: Props) {
         </div>
       </Section>
 
-      <div className="mb-4 grid grid-cols-3 gap-2">
-        <SummaryCard num={criticalCount} label="Bajo mínimo" alert />
-        <SummaryCard num={okCount} label="En buen nivel" />
-        <SummaryCard num={`${aprovPct}%`} label="Aprovisionado" />
+      <Section title="Aprovisionamiento del sitio hoy">
+        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
+          <AprovisionamientoCard label="🍳 Cocina" tiers={aprovisionamiento.cocina} />
+          <AprovisionamientoCard label="🍺 Barra" tiers={aprovisionamiento.barra} />
+          <AprovisionamientoCard label="Total general" tiers={aprovisionamiento.total} />
+        </div>
+      </Section>
+
+      <Section title="Últimas actividades del equipo de hoy">
+        {activity.length === 0 ? (
+          <EmptyState text="Todavía no hay actividad reportada." />
+        ) : (
+          <div>
+            {activity.map((a) => (
+              <div key={a.id} className="flex gap-2.5 border-b border-border py-2 last:border-0">
+                <div className="mt-1.5 h-[7px] w-[7px] flex-none rounded-full" style={{ backgroundColor: a.color }} />
+                <div>
+                  <div className="text-[11.5px]">{a.message}</div>
+                  <div className="mt-0.5 font-mono text-[9px] text-text-faint">{fmtRelTime(a.created_at)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Ventas por mesa hoy">
+        {ventasPorMesa.length === 0 ? (
+          <EmptyState text="Todavía no se han registrado ventas hoy." />
+        ) : (
+          <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2 xl:grid-cols-3">
+            {ventasPorMesa.map((v) => (
+              <Row key={v.mesa} left={`Mesa ${v.mesa}`} right={`${fmtCOP(v.total)} · ${v.pedidos} pedido${v.pedidos === 1 ? "" : "s"}`} />
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={onDownloadResumenPdf}
+          disabled={generatingResumenPdf}
+          className="flex-1 rounded-lg bg-gold py-2.5 text-[12.5px] font-bold text-[#1A140D] disabled:opacity-50"
+        >
+          {generatingResumenPdf ? "Generando…" : "📄 Descargar Resumen (PDF)"}
+        </button>
+        <button
+          onClick={onExportResumenCsv}
+          className="flex-1 rounded-lg border border-border bg-surface-2 py-2.5 text-[12.5px] font-bold text-text"
+        >
+          📊 Descargar Resumen (CSV)
+        </button>
       </div>
 
       <Section title="Barra y Cocina — qué hay">
@@ -472,24 +598,6 @@ export function PanelClient(props: Props) {
         </div>
       </Section>
 
-      <Section title="Actividad reciente">
-        {activity.length === 0 ? (
-          <EmptyState text="Todavía no hay actividad reportada." />
-        ) : (
-          <div>
-            {activity.map((a) => (
-              <div key={a.id} className="flex gap-2.5 border-b border-border py-2 last:border-0">
-                <div className="mt-1.5 h-[7px] w-[7px] flex-none rounded-full" style={{ backgroundColor: a.color }} />
-                <div>
-                  <div className="text-[11.5px]">{a.message}</div>
-                  <div className="mt-0.5 font-mono text-[9px] text-text-faint">{fmtRelTime(a.created_at)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
       <Section title="Reporte semanal">
         <div className="space-y-2.5 rounded-xl border border-border bg-surface p-3.5">
           <p className="text-[11px] leading-relaxed text-text-faint">
@@ -565,11 +673,30 @@ export function PanelClient(props: Props) {
   );
 }
 
-function SummaryCard({ num, label, alert }: { num: number | string; label: string; alert?: boolean }) {
+function AprovisionamientoCard({ label, tiers }: { label: string; tiers: { bajo: number; medio: number; alto: number; total: number } }) {
   return (
-    <div className="rounded-xl border border-border bg-surface px-2 py-3 text-center">
-      <div className={`font-display text-xl font-bold ${alert ? "text-red" : "text-gold"}`}>{num}</div>
-      <div className="mt-0.5 font-mono text-[9px] uppercase tracking-wide text-text-faint">{label}</div>
+    <div className="rounded-xl border border-border bg-surface p-3">
+      <div className="mb-2 text-[11.5px] font-bold">{label}</div>
+      <div className="grid grid-cols-3 gap-1.5 text-center">
+        <div>
+          <div className="font-display text-lg font-bold text-red">
+            {tiers.bajo}/{tiers.total}
+          </div>
+          <div className="font-mono text-[9px] uppercase tracking-wide text-text-faint">Bajo</div>
+        </div>
+        <div>
+          <div className="font-display text-lg font-bold text-amber">
+            {tiers.medio}/{tiers.total}
+          </div>
+          <div className="font-mono text-[9px] uppercase tracking-wide text-text-faint">Medio</div>
+        </div>
+        <div>
+          <div className="font-display text-lg font-bold text-green">
+            {tiers.alto}/{tiers.total}
+          </div>
+          <div className="font-mono text-[9px] uppercase tracking-wide text-text-faint">Alto</div>
+        </div>
+      </div>
     </div>
   );
 }

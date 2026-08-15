@@ -520,6 +520,15 @@ create table public.cash_register_other_payments (
 comment on table public.cash_register_other_payments is
   'Recibos de otros medios de pago del día (transferencia, Nequi, etc.), uno por transacción — se suman para cash_register.other_payment_amount al cerrar caja.';
 
+create table public.cash_register_cash_payments (
+  id       bigint generated always as identity primary key,
+  date     date not null references public.cash_register(date) on delete cascade,
+  concept  text,
+  amount   numeric not null check (amount > 0)
+);
+comment on table public.cash_register_cash_payments is
+  'Conteos de efectivo del día, uno por conteo/entrega — se suman para cash_register.cash_amount al cerrar caja (antes era un solo número escrito a mano).';
+
 -- ============================================================================
 -- 12. CALIFICACIÓN DE SERVICIO (QR público) Y VENCIMIENTOS
 -- ============================================================================
@@ -1228,6 +1237,7 @@ alter table public.cash_register_purchases enable row level security;
 alter table public.cash_register_transport_aid enable row level security;
 alter table public.cash_register_card_payments enable row level security;
 alter table public.cash_register_other_payments enable row level security;
+alter table public.cash_register_cash_payments enable row level security;
 alter table public.service_ratings enable row level security;
 alter table public.utility_bills enable row level security;
 alter table public.activity_log enable row level security;
@@ -1477,6 +1487,9 @@ create policy "cash_register_card_payments: crud jefe y mesero" on public.cash_r
   using (public.is_jefe() or public.current_user_role() = 'mesero')
   with check (public.is_jefe() or public.current_user_role() = 'mesero');
 create policy "cash_register_other_payments: crud jefe y mesero" on public.cash_register_other_payments for all to authenticated
+  using (public.is_jefe() or public.current_user_role() = 'mesero')
+  with check (public.is_jefe() or public.current_user_role() = 'mesero');
+create policy "cash_register_cash_payments: crud jefe y mesero" on public.cash_register_cash_payments for all to authenticated
   using (public.is_jefe() or public.current_user_role() = 'mesero')
   with check (public.is_jefe() or public.current_user_role() = 'mesero');
 

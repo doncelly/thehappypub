@@ -177,3 +177,133 @@ export async function exportCajaCsv(supabase: SupabaseClient<any>, today: string
   URL.revokeObjectURL(url);
   return true;
 }
+
+type AprovisionamientoTiers = { bajo: number; medio: number; alto: number; total: number };
+
+type ResumenParams = {
+  today: string;
+  personalHoy: { name: string; entrada: string | null; salida: string | null }[];
+  ventasHoy: number;
+  dailyGoal: number | null;
+  ventasSemana: number;
+  weeklyGoal: number | null;
+  aprovisionamiento: { cocina: AprovisionamientoTiers; barra: AprovisionamientoTiers; total: AprovisionamientoTiers };
+  actividad: { message: string; created_at: string }[];
+  ventasPorMesa: { mesa: string; total: number; pedidos: number }[];
+};
+
+// Módulo Resumen del Panel de administrador — snapshot del día actual (no
+// confundir con el "Reporte semanal" de arriba, que cubre últimos 7 días de
+// asistencia/caja/pérdidas). Toda la data ya está cargada en PanelClient
+// (Realtime), así que no vuelve a consultar la base — solo la formatea.
+export async function generateResumenPdf(p: ResumenParams) {
+  const { doc, line, space } = await createReportDoc("Resumen del día");
+  line(fmtDateLabel(p.today), 10, GRAY);
+  space(3);
+
+  line("Personal en sitio hoy", 13, HAPPY_GOLD, true);
+  space(1);
+  if (p.personalHoy.length === 0) {
+    line("Nadie ha marcado llegada hoy.", 9);
+  } else {
+    for (const person of p.personalHoy) {
+      line(`${person.name}: Entrada ${fmtHM(person.entrada)} · Salida ${fmtHM(person.salida)}`, 9);
+    }
+  }
+
+  space(4);
+  line("Meta de ventas", 13, HAPPY_GOLD, true);
+  space(1);
+  line(
+    p.dailyGoal
+      ? `Hoy: ${fmtCOP(p.ventasHoy)} / ${fmtCOP(p.dailyGoal)} (${Math.round((p.ventasHoy / p.dailyGoal) * 100)}%)`
+      : `Hoy: ${fmtCOP(p.ventasHoy)} (sin meta definida)`,
+    9,
+  );
+  line(
+    p.weeklyGoal
+      ? `Semana: ${fmtCOP(p.ventasSemana)} / ${fmtCOP(p.weeklyGoal)} (${Math.round((p.ventasSemana / p.weeklyGoal) * 100)}%)`
+      : `Semana: ${fmtCOP(p.ventasSemana)} (sin meta definida)`,
+    9,
+  );
+
+  space(4);
+  line("Aprovisionamiento del sitio hoy", 13, HAPPY_GOLD, true);
+  space(1);
+  for (const [label, t] of [
+    ["Cocina", p.aprovisionamiento.cocina],
+    ["Barra", p.aprovisionamiento.barra],
+    ["Total general", p.aprovisionamiento.total],
+  ] as const) {
+    line(`${label}: Bajo ${t.bajo}/${t.total} · Medio ${t.medio}/${t.total} · Alto ${t.alto}/${t.total}`, 9);
+  }
+
+  space(4);
+  line("Últimas actividades del equipo de hoy", 13, HAPPY_GOLD, true);
+  space(1);
+  if (p.actividad.length === 0) {
+    line("Sin actividad reportada.", 9);
+  } else {
+    for (const a of p.actividad) {
+      line(`${a.message} (${fmtHM(a.created_at)})`, 8.5);
+    }
+  }
+
+  space(4);
+  line("Ventas por mesa hoy", 13, HAPPY_GOLD, true);
+  space(1);
+  if (p.ventasPorMesa.length === 0) {
+    line("Sin ventas registradas hoy.", 9);
+  } else {
+    for (const v of p.ventasPorMesa) {
+      line(`Mesa ${v.mesa}: ${fmtCOP(v.total)} (${v.pedidos} pedido${v.pedidos === 1 ? "" : "s"})`, 9);
+    }
+  }
+
+  doc.save(`resumen-happy-pub-${p.today}.pdf`);
+}
+
+export function exportResumenCsv(p: ResumenParams) {
+  const rows: (string | number)[][] = [];
+  rows.push(["Resumen del día", p.today]);
+  rows.push([]);
+  rows.push(["Personal en sitio hoy"]);
+  rows.push(["Nombre", "Entrada", "Salida"]);
+  for (const person of p.personalHoy) rows.push([person.name, fmtHM(person.entrada), fmtHM(person.salida)]);
+  rows.push([]);
+  rows.push(["Meta de ventas"]);
+  rows.push(["Periodo", "Ventas", "Meta", "% cumplido"]);
+  rows.push(["Hoy", p.ventasHoy, p.dailyGoal ?? "", p.dailyGoal ? Math.round((p.ventasHoy / p.dailyGoal) * 100) : ""]);
+  rows.push(["Semana", p.ventasSemana, p.weeklyGoal ?? "", p.weeklyGoal ? Math.round((p.ventasSemana / p.weeklyGoal) * 100) : ""]);
+  rows.push([]);
+  rows.push(["Aprovisionamiento del sitio hoy"]);
+  rows.push(["Grupo", "Bajo", "Medio", "Alto", "Total"]);
+  rows.push(["Cocina", p.aprovisionamiento.cocina.bajo, p.aprovisionamiento.cocina.medio, p.aprovisionamiento.cocina.alto, p.aprovisionamiento.cocina.total]);
+  rows.push(["Barra", p.aprovisionamiento.barra.bajo, p.aprovisionamiento.barra.medio, p.aprovisionamiento.barra.alto, p.aprovisionamiento.barra.total]);
+  rows.push([
+    "Total general",
+    p.aprovisionamiento.total.bajo,
+    p.aprovisionamiento.total.medio,
+    p.aprovisionamiento.total.alto,
+    p.aprovisionamiento.total.total,
+  ]);
+  rows.push([]);
+  rows.push(["Últimas actividades del equipo de hoy"]);
+  rows.push(["Mensaje", "Hora"]);
+  for (const a of p.actividad) rows.push([a.message, fmtHM(a.created_at)]);
+  rows.push([]);
+  rows.push(["Ventas por mesa hoy"]);
+  rows.push(["Mesa", "Total", "Pedidos"]);
+  for (const v of p.ventasPorMesa) rows.push([v.mesa, v.total, v.pedidos]);
+
+  const csv = rowsToCsvString(rows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `resumen-happy-pub-${p.today}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

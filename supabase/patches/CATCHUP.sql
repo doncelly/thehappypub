@@ -1,11 +1,11 @@
 -- ============================================================================
--- CATCHUP: todos los patches hasta 0023 en un solo archivo, seguro de correr
+-- CATCHUP: todos los patches hasta 0025 en un solo archivo, seguro de correr
 -- las veces que sea (cada pieza revisa si ya existe antes de crearla). Úsalo
 -- en vez de ir patch por patch — corre esto una vez y quedas al día.
 --
 -- Este archivo SIEMPRE se llama CATCHUP.sql (nombre fijo, no cambia con cada
 -- patch nuevo) — así el link/atajo a este archivo nunca se rompe. Si ves un
--- número más alto que 0023 en supabase/patches/, este archivo ya no está al
+-- número más alto que 0025 en supabase/patches/, este archivo ya no está al
 -- día — pídele a Claude que lo regenere.
 -- ============================================================================
 
@@ -1299,3 +1299,64 @@ end;
 $$;
 comment on function public.void_order is
   'RPC para Vender: anula un pedido — restaura item_status.qty (o gauge por volumen) según la receta, registra actividad, y borra el pedido (order_items en cascada). Jefe anula cualquiera; mesero solo los suyos.';
+
+-- ---------------------------------------------------------------------------
+-- 0024_caja_efectivo_itemizado.sql
+-- ---------------------------------------------------------------------------
+-- Punto 20 del backlog (parte 2): "Pagos en efectivo del día" pasa de un
+-- solo número escrito a mano a una lista de conteos/entregas (igual que
+-- tarjetas y otros medios de pago, patch 0022) que la app suma sola.
+
+create table if not exists public.cash_register_cash_payments (
+  id       bigint generated always as identity primary key,
+  date     date not null references public.cash_register(date) on delete cascade,
+  concept  text,
+  amount   numeric not null check (amount > 0)
+);
+comment on table public.cash_register_cash_payments is
+  'Conteos de efectivo del día, uno por conteo/entrega — se suman para cash_register.cash_amount al cerrar caja (antes era un solo número escrito a mano).';
+
+alter table public.cash_register_cash_payments enable row level security;
+
+drop policy if exists "cash_register_cash_payments: crud jefe y mesero" on public.cash_register_cash_payments;
+create policy "cash_register_cash_payments: crud jefe y mesero" on public.cash_register_cash_payments for all to authenticated
+  using (public.is_jefe() or public.current_user_role() = 'mesero')
+  with check (public.is_jefe() or public.current_user_role() = 'mesero');
+
+-- ---------------------------------------------------------------------------
+-- 0025_inventario_cocina_aseo_desechables.sql
+-- ---------------------------------------------------------------------------
+-- Aseo de cocina y desechables/empaques faltaban en Inventario — cocinero no
+-- tenía ninguna categoría de aseo propia (la existente "aseo" es domain=
+-- 'mesas', cocinero no la ve por RLS). Más "Crema de leche" en Cocina.
+
+insert into public.categories (id, label, domain, sort_order) values
+  ('aseo_cocina',        '🧽 Aseo Cocina', 'cocina', 13),
+  ('desechables_cocina', '📦 Desechables', 'cocina', 14)
+on conflict (id) do nothing;
+
+insert into public.items (id, name, category, mode, unit, step, min) values
+  ('crema_leche',              'Crema de leche',              'cocina',              'qty',   'ml', 200, 500),
+  ('jabon_loza_desengrasante', 'Jabón loza desengrasante',    'aseo_cocina',         'gauge', null, null, null),
+  ('jabon_polvo',              'Jabón en polvo',              'aseo_cocina',         'gauge', null, null, null),
+  ('sabras',                   'Sabras',                      'aseo_cocina',         'gauge', null, null, null),
+  ('clorox',                   'Clorox',                      'aseo_cocina',         'gauge', null, null, null),
+  ('contenedores_llevar',      'Contenedores para llevar',    'desechables_cocina',  'gauge', null, null, null),
+  ('palillos_largos',          'Palillos largos',             'desechables_cocina',  'gauge', null, null, null),
+  ('papel_graso',              'Papel graso',                 'desechables_cocina',  'gauge', null, null, null),
+  ('cucharitas_desechables',   'Cucharitas desechables',      'desechables_cocina',  'gauge', null, null, null),
+  ('copitas_desechables',      'Copitas desechables',         'desechables_cocina',  'gauge', null, null, null),
+  ('bolsas_llevar',            'Bolsas para llevar',          'desechables_cocina',  'gauge', null, null, null)
+on conflict (id) do nothing;
+
+-- Arranca en el estado inicial de siempre (0/agotado) para los items nuevos.
+insert into public.item_status (item_id, status_gauge, qty)
+select id, case when mode = 'gauge' then 'agotado' else null end,
+          case when mode = 'qty' then 0 else null end
+from public.items
+where id in (
+  'crema_leche', 'jabon_loza_desengrasante', 'jabon_polvo', 'sabras', 'clorox',
+  'contenedores_llevar', 'palillos_largos', 'papel_graso', 'cucharitas_desechables',
+  'copitas_desechables', 'bolsas_llevar'
+)
+on conflict (item_id) do nothing;
