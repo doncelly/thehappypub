@@ -195,7 +195,7 @@ Pega este archivo completo como primer mensaje. El asistente debe:
 
 `supabase/schema.sql` y `supabase/seed.sql` son la fuente de verdad para
 **instalaciones nuevas**. El proyecto Supabase real del usuario se actualiza
-con patches incrementales en `supabase/patches/` (0001 a 0026, todos
+con patches incrementales en `supabase/patches/` (0001 a 0027, todos
 idempotentes — ver error real #16 sobre qué tan en serio hay que tomarse
 "idempotente"). Archivo combinado:
 
@@ -310,6 +310,18 @@ archivo (0017). Ver error real #16.
     horaria del lado TypeScript, revisar también el lado SQL
     (`grep current_date` en `schema.sql`) — no basta con arreglarlo en un
     solo lado del stack.
+    ⚠️ **Bug encima del bug**: el patch 0026 creó `today_bogota()` sin su
+    `grant execute` (a diferencia de `is_jefe()`/`current_user_id()`, que sí
+    lo tienen) — sin ese grant, ni `authenticated` puede ejecutar la
+    función, así que las policies que la usan fallan al evaluarse para
+    CUALQUIER usuario, no solo en la ventana de la noche. O sea que 0026
+    por sí solo dejaba el check-in/salida roto por completo. Se corrigió en
+    el patch 0027 (`grant execute on function public.today_bogota() to
+    anon, authenticated;`). Lección: cualquier función SQL nueva que se use
+    dentro de una policy de RLS necesita su `grant execute` explícito — en
+    este proyecto el privilegio por default a `PUBLIC` está revocado, cada
+    función nueva lo necesita a mano (comparar contra las funciones
+    existentes antes de dar por bueno un patch con una función nueva).
 
 ## Qué falta — backlog real pedido por el usuario (11 ago 2026)
 

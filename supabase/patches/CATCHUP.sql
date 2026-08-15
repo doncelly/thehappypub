@@ -1,11 +1,11 @@
 -- ============================================================================
--- CATCHUP: todos los patches hasta 0026 en un solo archivo, seguro de correr
+-- CATCHUP: todos los patches hasta 0027 en un solo archivo, seguro de correr
 -- las veces que sea (cada pieza revisa si ya existe antes de crearla). Úsalo
 -- en vez de ir patch por patch — corre esto una vez y quedas al día.
 --
 -- Este archivo SIEMPRE se llama CATCHUP.sql (nombre fijo, no cambia con cada
 -- patch nuevo) — así el link/atajo a este archivo nunca se rompe. Si ves un
--- número más alto que 0026 en supabase/patches/, este archivo ya no está al
+-- número más alto que 0027 en supabase/patches/, este archivo ya no está al
 -- día — pídele a Claude que lo regenere.
 -- ============================================================================
 
@@ -1551,3 +1551,16 @@ begin
   return new;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- 0027_fix_grant_today_bogota.sql
+-- ---------------------------------------------------------------------------
+-- URGENTE: el patch 0026 creó public.today_bogota() pero se me olvidó el
+-- grant execute — sin eso, ni siquiera "authenticated" puede EJECUTAR la
+-- función, así que las policies de attendance que la usan (date =
+-- public.today_bogota()) fallan al evaluarse para CUALQUIER usuario, no
+-- solo en la ventana de las 7pm-medianoche. Este patch es el que de verdad
+-- hace falta correr — sin este grant, el patch 0026 dejó el check-in/salida
+-- de mesero/cocinero roto por completo, no solo de noche.
+
+grant execute on function public.today_bogota() to anon, authenticated;

@@ -1379,6 +1379,7 @@ stable
 as $$
   select (now() at time zone 'America/Bogota')::date;
 $$;
+grant execute on function public.today_bogota() to anon, authenticated;
 
 create policy "attendance: lectura propia o jefe" on public.attendance for select to authenticated using (
   user_id = public.current_user_id() or public.is_jefe()
