@@ -719,7 +719,7 @@ begin
   end if;
 
   select discount_pct, discount_category into v_discount_pct, v_discount_cat
-  from public.agenda_days where date = current_date;
+  from public.agenda_days where date = public.today_bogota();
 
   select name into v_actor_name from public.users where id = v_user_id;
 
@@ -1136,7 +1136,7 @@ as $$
 begin
   if new.qty is not null then
     insert into public.stock_history (item_id, date, qty)
-    values (new.item_id, current_date, new.qty)
+    values (new.item_id, public.today_bogota(), new.qty)
     on conflict (item_id, date) do update set qty = excluded.qty;
   end if;
   return new;
@@ -1365,16 +1365,31 @@ create policy "order_items: crear jefe y mesero" on public.order_items for inser
 
 -- ---- asistencia: propia + jefe ve/corrige todo ----
 
+-- "Hoy" en Bogotá (UTC-5 fijo, sin horario de verano) — NUNCA usar current_date
+-- a secas acá: current_date es la fecha del servidor de Postgres (UTC en
+-- Supabase), que ya está en "mañana" entre las 7pm y medianoche hora Bogotá.
+-- Sin esto, mesero/cocinero no podían marcar llegada/salida (bloqueado por
+-- RLS) justo en esa ventana — la peor hora posible, coincide con el turno de
+-- la noche. Mismo bug de fondo que ya se corrigió en TS (ver todayISO() en
+-- lib/format.ts, error real #15 del HANDOFF) pero acá vivía del lado SQL.
+create or replace function public.today_bogota()
+returns date
+language sql
+stable
+as $$
+  select (now() at time zone 'America/Bogota')::date;
+$$;
+
 create policy "attendance: lectura propia o jefe" on public.attendance for select to authenticated using (
   user_id = public.current_user_id() or public.is_jefe()
 );
 create policy "attendance: marcar propia (hoy) o jefe corrige cualquier fecha" on public.attendance for insert to authenticated with check (
-  (user_id = public.current_user_id() and date = current_date) or public.is_jefe()
+  (user_id = public.current_user_id() and date = public.today_bogota()) or public.is_jefe()
 );
 create policy "attendance: actualizar propia (hoy) o jefe corrige cualquier fecha" on public.attendance for update to authenticated using (
-  (user_id = public.current_user_id() and date = current_date) or public.is_jefe()
+  (user_id = public.current_user_id() and date = public.today_bogota()) or public.is_jefe()
 ) with check (
-  (user_id = public.current_user_id() and date = current_date) or public.is_jefe()
+  (user_id = public.current_user_id() and date = public.today_bogota()) or public.is_jefe()
 );
 
 -- ---- tarifas y geocerca: lectura abierta (se necesita para "Mi día"), edición jefe ----

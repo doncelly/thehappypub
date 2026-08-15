@@ -195,7 +195,7 @@ Pega este archivo completo como primer mensaje. El asistente debe:
 
 `supabase/schema.sql` y `supabase/seed.sql` son la fuente de verdad para
 **instalaciones nuevas**. El proyecto Supabase real del usuario se actualiza
-con patches incrementales en `supabase/patches/` (0001 a 0025, todos
+con patches incrementales en `supabase/patches/` (0001 a 0026, todos
 idempotentes — ver error real #16 sobre qué tan en serio hay que tomarse
 "idempotente"). Archivo combinado:
 
@@ -284,6 +284,32 @@ archivo (0017). Ver error real #16.
 17. **Renombrar el archivo CATCHUP combinado con cada patch nuevo confundía
     al usuario** ("me sale eliminado" en GitHub) — se resolvió dándole un
     nombre fijo (`CATCHUP.sql`) que nunca cambia, solo su contenido.
+18. **URGENTE (15 ago 2026): mesero/cocinero no podían marcar llegada/salida
+    entre las 7pm y medianoche hora Bogotá** — mismo bug de fondo que el
+    error #15 (zona horaria), pero esta vez del lado SQL, en tres sitios que
+    nunca se habían revisado cuando se corrigió el resto: (a) las policies
+    RLS de `attendance` comparaban `date` contra `current_date` (fecha del
+    SERVIDOR de Postgres = UTC en Supabase, no Bogotá) — entre las 7pm y
+    medianoche hora Bogotá, `current_date` en UTC ya es "mañana", así que el
+    INSERT/UPDATE con `date`=hoy(Bogotá) violaba el RLS y quedaba
+    bloqueado; (b) `register_order` buscaba el descuento del día con el
+    mismo `current_date` — una promo con horario ("antes de 9pm") podía
+    fallar de aplicarse justo en la noche, que es cuando más importa; (c) el
+    trigger `set_stock_history` fechaba mal los ajustes de inventario hechos
+    de noche en la tabla de Stock semanal de Panel. **Además**, el frontend
+    (`MiDiaClient.tsx: markAttendance`) no revisaba el `{ error }` del
+    upsert — por eso el mesero veía "Llegada registrada" (estado optimista)
+    aunque el guardado real hubiera fallado por RLS, y al recargar la
+    página parecía que "se había borrado" (nunca se guardó de verdad). Se
+    corrigieron los 3 sitios SQL con una función nueva
+    `public.today_bogota()` (`(now() at time zone 'America/Bogota')::date`,
+    mismo cálculo que `todayISO()` en `lib/format.ts`) y se agregó manejo de
+    error real (revertir optimista + toast) en `markAttendance` y en
+    `AsistenciaSection.tsx`. Patch 0026 — **correr apenas se pueda**, antes
+    del turno de la noche. Lección: cuando se corrige un bug de zona
+    horaria del lado TypeScript, revisar también el lado SQL
+    (`grep current_date` en `schema.sql`) — no basta con arreglarlo en un
+    solo lado del stack.
 
 ## Qué falta — backlog real pedido por el usuario (11 ago 2026)
 

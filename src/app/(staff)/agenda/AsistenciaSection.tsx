@@ -73,9 +73,13 @@ export function AsistenciaSection({ date, attendance, users, onChanged }: Props)
     const key = editKey(userId, workType);
     setSaving(key);
     try {
-      await supabase
+      const { error: dbError } = await supabase
         .from("attendance")
         .upsert({ user_id: userId, date, work_type: workType, check_in: entradaTs, check_out: salidaTs, method: "manual" }, { onConflict: "user_id,date,work_type" });
+      if (dbError) {
+        setError(`No se pudo guardar: ${dbError.message}`);
+        return;
+      }
       onChanged();
     } finally {
       setSaving(null);
@@ -102,9 +106,13 @@ export function AsistenciaSection({ date, attendance, users, onChanged }: Props)
     }
     setSaving("__new__");
     try {
-      await supabase
+      const { error: dbError } = await supabase
         .from("attendance")
         .upsert({ user_id: user.id, date, work_type: workType, check_in: entradaTs, check_out: salidaTs, method: "manual" }, { onConflict: "user_id,date,work_type" });
+      if (dbError) {
+        setError(`No se pudo guardar: ${dbError.message}`);
+        return;
+      }
       setNewPerson("");
       setNewEntrada("");
       setNewSalida("");

@@ -104,10 +104,10 @@ export function MiDiaClient(props: Props) {
     return attendanceList.find((a) => a.work_type === workType);
   }
 
-  async function markAttendance(workType: WorkType, field: "check_in" | "check_out", method: "auto" | "manual") {
+  async function markAttendance(workType: WorkType, field: "check_in" | "check_out", method: "auto" | "manual"): Promise<boolean> {
     const current = attendanceFor(workType);
-    if (field === "check_out" && !current?.check_in) return;
-    if (current?.[field]) return;
+    if (field === "check_out" && !current?.check_in) return false;
+    if (current?.[field]) return false;
     const nowIso = new Date().toISOString();
     const next: AttendanceRow = {
       user_id: user.id,
@@ -118,8 +118,16 @@ export function MiDiaClient(props: Props) {
       method,
     };
     setAttendanceList((prev) => [...prev.filter((a) => a.work_type !== workType), next]);
-    await supabase.from("attendance").upsert(next, { onConflict: "user_id,date,work_type" });
+    const { error } = await supabase.from("attendance").upsert(next, { onConflict: "user_id,date,work_type" });
+    if (error) {
+      // Revierte el optimista — si no, el guard de arriba (`current?.[field]`)
+      // pensaría que ya quedó guardado y bloquearía cualquier reintento.
+      setAttendanceList((prev) => [...prev.filter((a) => a.work_type !== workType), ...(current ? [current] : [])]);
+      showToast("No se pudo registrar — intenta de nuevo o avísale al jefe");
+      return false;
+    }
     if (method === "manual") showToast("Registrado ✓");
+    return true;
   }
 
   // checkGeofence() del original — igual que Vender/Panel, la geolocalización
@@ -145,13 +153,22 @@ export function MiDiaClient(props: Props) {
           setAttendanceList((prevList) => {
             const current = prevList.find((a) => a.work_type === workType);
             if (!current?.check_in && d <= geo!.arrive_radius_m) {
-              markAttendance(workType, "check_in", "auto");
-              setGeoStatus("ok");
-              setGeoText(`Llegada registrada`);
+              setGeoStatus("wait");
+              setGeoText("Registrando llegada…");
+              // No asumir éxito acá — el poll de 60s (GEO_POLL_MS) reintenta
+              // solo mientras check_in siga vacío, markAttendance ya revierte
+              // el optimista si falla, así que un fallo se autocorrige.
+              markAttendance(workType, "check_in", "auto").then((ok) => {
+                setGeoStatus(ok ? "ok" : "err");
+                setGeoText(ok ? "Llegada registrada" : "No se pudo registrar la llegada — reintentando…");
+              });
             } else if (current?.check_in && !current?.check_out && d > geo!.leave_radius_m) {
-              markAttendance(workType, "check_out", "auto");
-              setGeoStatus("ok");
-              setGeoText(`Salida registrada`);
+              setGeoStatus("wait");
+              setGeoText("Registrando salida…");
+              markAttendance(workType, "check_out", "auto").then((ok) => {
+                setGeoStatus(ok ? "ok" : "err");
+                setGeoText(ok ? "Salida registrada" : "No se pudo registrar la salida — reintentando…");
+              });
             } else if (current?.check_in && current?.check_out) {
               setGeoStatus("ok");
               setGeoText(`Turno completo hoy: ${fmtHM(current.check_in)} – ${fmtHM(current.check_out)}`);
